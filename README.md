@@ -5,7 +5,7 @@ A visual status line script for [Claude Code](https://docs.anthropic.com/en/docs
 ## Preview
 
 ```
-◑ 49% ▁▂▃▄▁▁▁▁ 98k/200k | A$1.74 | 12m34s | Opus 4.6 | explanatory | /my/project | main | clean | 0 files | +0/-0
+◑ 49% ▁▂▃▄▁▁▁▁ 498k/1.0M | A$1.74 | 12m34s | Opus 4.6 | explanatory | /my/project | main | clean | 0 files | +0/-0
 ```
 
 ## Features

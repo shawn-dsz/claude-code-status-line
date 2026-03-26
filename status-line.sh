@@ -12,6 +12,22 @@ used_pct=$(echo "$input" | jq -r '.context_window.used_percentage // empty')
 input_tokens=$(echo "$input" | jq -r '.context_window.current_usage.input_tokens // empty')
 window_size=$(echo "$input" | jq -r '.context_window.context_window_size // empty')
 
+# Override known context window sizes when Claude Code reports stale values
+# Model display names → actual context window tokens
+model_lower=$(echo "$model" | tr '[:upper:]' '[:lower:]')
+case "$model_lower" in
+    *opus*|*sonnet*|*claude*) actual_window=1000000 ;;
+    *gemini*)                 actual_window=2000000 ;;
+    *)                        actual_window="" ;;
+esac
+if [ -n "$actual_window" ] && [ -n "$window_size" ] && [ "$actual_window" -gt "$window_size" ]; then
+    window_size=$actual_window
+    # Recalculate percentage with corrected window size
+    if [ -n "$input_tokens" ]; then
+        used_pct=$(( (input_tokens * 100) / window_size ))
+    fi
+fi
+
 ctx_gauge=''
 if [ -n "$used_pct" ] && [ -n "$input_tokens" ] && [ -n "$window_size" ]; then
     # Dial icon based on quartile
