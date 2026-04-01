@@ -5,7 +5,7 @@ A visual status line script for [Claude Code](https://docs.anthropic.com/en/docs
 ## Preview
 
 ```
-◑ 49% ▁▂▃▄▁▁▁▁ 498k/1.0M | A$1.74 | 12m34s | Opus 4.6 | explanatory | /my/project | main | clean | 0 files | +0/-0
+◑ 49% ▁▂▃▄▁▁▁▁ 498k/1.0M | A$1.74 | 12m34s | Opus 4.6 | explanatory | ⚙ med | /my/project | main | clean | 0 files | +0/-0
 ```
 
 ## Features
@@ -14,6 +14,7 @@ A visual status line script for [Claude Code](https://docs.anthropic.com/en/docs
 - **Colour-coded usage**: green (0-50%), yellow (50-75%), orange (75-90%), red (90%+)
 - **Session cost** in AUD (configurable exchange rate)
 - **Session duration** with adaptive formatting (`45s`, `12m34s`, `1h02m`)
+- **Reasoning effort** indicator with colour coding: green (`⚡low`), yellow (`⚙ med`), magenta (`🧠high`)
 - **Git info**: branch, clean/dirty status, changed file count, lines added/removed
 
 ## Installation
@@ -81,6 +82,7 @@ The script reads JSON from stdin provided by Claude Code. Available fields inclu
 | `context_window.context_window_size` | Total context window size |
 | `cost.total_cost_usd` | Cumulative session cost in USD |
 | `cost.total_duration_ms` | Session wall-clock time in milliseconds |
+| `reasoning_effort` | Reasoning effort level (low, medium, high) |
 
 ## Licence
 

@@ -1,11 +1,23 @@
 #!/bin/bash
 # Status line script for Claude Code
-# Displays: model | output_style | project_dir | git_branch | git_status | files | lines
+# Displays: model | output_style | effort | project_dir | git_branch | git_status | files | lines
 
 input=$(cat)
 model=$(echo "$input" | jq -r '.model.display_name')
 output_style=$(echo "$input" | jq -r '.output_style.name')
 project_dir=$(echo "$input" | jq -r '.workspace.project_dir')
+
+# Reasoning effort (may appear at top level or nested)
+reasoning_effort=$(echo "$input" | jq -r '.reasoning_effort // .model.reasoning_effort // .output_style.reasoning_effort // empty')
+effort_display=''
+if [ -n "$reasoning_effort" ]; then
+    case "$reasoning_effort" in
+        low)    effort_display=$(printf "\033[32m⚡low\033[0m") ;;    # green - fast
+        medium) effort_display=$(printf "\033[33m⚙ med\033[0m") ;;   # yellow - balanced
+        high)   effort_display=$(printf "\033[35m🧠high\033[0m") ;;   # magenta - deep
+        *)      effort_display=$(printf "\033[38;5;245m⚙ %s\033[0m" "$reasoning_effort") ;;  # grey - unknown
+    esac
+fi
 
 # Context window gauge
 used_pct=$(echo "$input" | jq -r '.context_window.used_percentage // empty')
@@ -145,7 +157,13 @@ if git -C "$project_dir" rev-parse --git-dir > /dev/null 2>&1; then
 fi
 
 # Build status line with colors
-status_parts=$(printf "\033[36m%s\033[0m | \033[35m%s\033[0m | \033[32m%s\033[0m" "$model" "$output_style" "$project_dir")
+status_parts=$(printf "\033[36m%s\033[0m | \033[35m%s\033[0m" "$model" "$output_style")
+
+if [ -n "$effort_display" ]; then
+    status_parts=$(printf "%s | %s" "$status_parts" "$effort_display")
+fi
+
+status_parts=$(printf "%s | \033[32m%s\033[0m" "$status_parts" "$project_dir")
 
 if [ -n "$git_branch" ]; then
     status_parts=$(printf "%s | \033[33m%s\033[0m" "$status_parts" "$git_branch")
