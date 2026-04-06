@@ -7,21 +7,38 @@ model=$(echo "$input" | jq -r '.model.display_name')
 output_style=$(echo "$input" | jq -r '.output_style.name')
 project_dir=$(echo "$input" | jq -r '.workspace.project_dir')
 
-# Reasoning effort (may appear at top level or nested)
+# Reasoning effort (may appear at top level or nested; default based on model)
 reasoning_effort=$(echo "$input" | jq -r '.reasoning_effort // .model.reasoning_effort // .output_style.reasoning_effort // empty')
-effort_display=''
-if [ -n "$reasoning_effort" ]; then
-    case "$reasoning_effort" in
-        low)    effort_display=$(printf "\033[32m⚡low\033[0m") ;;    # green - fast
-        medium) effort_display=$(printf "\033[33m⚙ med\033[0m") ;;   # yellow - balanced
-        high)   effort_display=$(printf "\033[35m🧠high\033[0m") ;;   # magenta - deep
-        *)      effort_display=$(printf "\033[38;5;245m⚙ %s\033[0m" "$reasoning_effort") ;;  # grey - unknown
+if [ -z "$reasoning_effort" ]; then
+    # Default effort based on model
+    model_lower=$(echo "$model" | tr '[:upper:]' '[:lower:]')
+    case "$model_lower" in
+        *opus*|*sonnet*) reasoning_effort='high' ;;
+        *haiku*)         reasoning_effort='medium' ;;
+        *)               reasoning_effort='medium' ;;
     esac
 fi
+case "$reasoning_effort" in
+    low)    effort_display=$(printf "\033[32m⚡low\033[0m") ;;    # green - fast
+    medium) effort_display=$(printf "\033[33m⚙ med\033[0m") ;;   # yellow - balanced
+    high)   effort_display=$(printf "\033[35m🧠high\033[0m") ;;   # magenta - deep
+    *)      effort_display=$(printf "\033[38;5;245m⚙ %s\033[0m" "$reasoning_effort") ;;  # grey - unknown
+esac
 
 # Context window gauge
 used_pct=$(echo "$input" | jq -r '.context_window.used_percentage // empty')
 window_size=$(echo "$input" | jq -r '.context_window.context_window_size // empty')
+
+# Override known context window sizes when Claude Code reports stale values
+model_lower=$(echo "$model" | tr '[:upper:]' '[:lower:]')
+case "$model_lower" in
+    *opus*|*sonnet*|*claude*|*haiku*) actual_window=1000000 ;;
+    *gemini*)                         actual_window=2000000 ;;
+    *)                                actual_window="" ;;
+esac
+if [ -n "$actual_window" ] && [ -n "$window_size" ] && [ "$actual_window" -gt "$window_size" ]; then
+    window_size=$actual_window
+fi
 
 # Calculate total tokens used in context (sum of all current_usage token fields)
 input_tokens=$(echo "$input" | jq -r '
@@ -32,6 +49,11 @@ input_tokens=$(echo "$input" | jq -r '
     # Fallback to total_input_tokens if current_usage sum is zero
     input_tokens=$(echo "$input" | jq -r '.context_window.total_input_tokens // empty')
 }
+
+# Recalculate percentage if window size was overridden
+if [ -n "$actual_window" ] && [ -n "$input_tokens" ] && [ "$input_tokens" != "0" ] && [ -n "$window_size" ]; then
+    used_pct=$(( (input_tokens * 100) / window_size ))
+fi
 
 ctx_gauge=''
 if [ -n "$used_pct" ] && [ -n "$window_size" ]; then
@@ -44,15 +66,24 @@ if [ -n "$used_pct" ] && [ -n "$window_size" ]; then
         dial='●'
     fi
 
-    # Colour and health recommendation based on context usage
-    if [ "$used_pct" -lt 30 ]; then
-        colour='\033[32m'  # green - healthy
+    # Heat gradient and health hint based on context usage
+    if [ "$used_pct" -lt 15 ]; then
+        colour='\033[38;5;34m'    # green - plenty of room
         health_hint=''
-    elif [ "$used_pct" -lt 60 ]; then
-        colour='\033[33m'  # amber - consider compacting
+    elif [ "$used_pct" -lt 30 ]; then
+        colour='\033[38;5;112m'   # light green - healthy
+        health_hint=''
+    elif [ "$used_pct" -lt 45 ]; then
+        colour='\033[38;5;220m'   # yellow - getting warm
         health_hint=' ⚠ compact soon'
+    elif [ "$used_pct" -lt 60 ]; then
+        colour='\033[38;5;208m'   # orange - consider compacting
+        health_hint=' ⚠ compact soon'
+    elif [ "$used_pct" -lt 75 ]; then
+        colour='\033[38;5;196m'   # red - compact now
+        health_hint=' 🛑 compact now'
     else
-        colour='\033[31m'  # red - compact/clear/new chat
+        colour='\033[38;5;160m'   # dark red - critical
         health_hint=' 🛑 compact or new chat'
     fi
     reset='\033[0m'
@@ -142,37 +173,40 @@ if git -C "$project_dir" rev-parse --git-dir > /dev/null 2>&1; then
     fi
 fi
 
-# Build status line with colors
-status_parts=$(printf "\033[36m%s\033[0m | \033[35m%s\033[0m" "$model" "$output_style")
+# Single status line: context gauge | model | effort | files | lines | duration
+output=''
+
+if [ -n "$ctx_gauge" ]; then
+    output="$ctx_gauge"
+fi
+
+[ -n "$output" ] && output="${output} | "
+output=$(printf "%s\033[36m%s\033[0m" "$output" "$model")
 
 if [ -n "$effort_display" ]; then
-    status_parts=$(printf "%s | %s" "$status_parts" "$effort_display")
+    output=$(printf "%s | %s" "$output" "$effort_display")
 fi
 
-status_parts=$(printf "%s | \033[32m%s\033[0m" "$status_parts" "$project_dir")
-
-if [ -n "$git_branch" ]; then
-    status_parts=$(printf "%s | \033[33m%s\033[0m" "$status_parts" "$git_branch")
-
-    if [ "$git_status" = 'clean' ]; then
-        status_parts=$(printf "%s | \033[32m%s\033[0m" "$status_parts" "$git_status")
+if [ -n "$files_changed" ]; then
+    # Heat gradient: green (0 files) -> yellow -> orange -> red (10+ files)
+    if [ "$files_changed" -eq 0 ]; then
+        file_colour='\033[38;5;34m'    # green
+    elif [ "$files_changed" -le 2 ]; then
+        file_colour='\033[38;5;112m'   # light green
+    elif [ "$files_changed" -le 4 ]; then
+        file_colour='\033[38;5;220m'   # yellow
+    elif [ "$files_changed" -le 6 ]; then
+        file_colour='\033[38;5;208m'   # orange
+    elif [ "$files_changed" -le 9 ]; then
+        file_colour='\033[38;5;196m'   # red
     else
-        status_parts=$(printf "%s | \033[31m%s\033[0m" "$status_parts" "$git_status")
+        file_colour='\033[38;5;160m'   # dark red
     fi
-
-    status_parts=$(printf "%s | \033[34m%s files\033[0m" "$status_parts" "$files_changed")
-    status_parts=$(printf "%s | \033[36m%s\033[0m" "$status_parts" "$lines_changed")
+    output=$(printf "%s | ${file_colour}%s files\033[0m \033[36m%s\033[0m" "$output" "$files_changed" "$lines_changed")
 fi
 
-# Assemble final status line: context gauge | cost | duration | main parts
-output="$status_parts"
-
-# Prepend duration and context gauge (right to left so order is gauge | duration | ...)
 if [ -n "$duration_display" ]; then
-    output="${duration_display} | ${output}"
-fi
-if [ -n "$ctx_gauge" ]; then
-    output="${ctx_gauge} | ${output}"
+    output="${output} | ${duration_display}"
 fi
 
 echo "$output"
