@@ -1,6 +1,6 @@
 #!/bin/bash
 # Status line script for Claude Code
-# Displays: model | output_style | effort | project_dir | git_branch | git_status | files | lines
+# Displays: context_health | duration | model | output_style | effort | project_dir | git_branch | git_status | files | lines
 
 input=$(cat)
 model=$(echo "$input" | jq -r '.model.display_name')
@@ -21,47 +21,39 @@ fi
 
 # Context window gauge
 used_pct=$(echo "$input" | jq -r '.context_window.used_percentage // empty')
-input_tokens=$(echo "$input" | jq -r '.context_window.current_usage.input_tokens // empty')
 window_size=$(echo "$input" | jq -r '.context_window.context_window_size // empty')
 
-# Override known context window sizes when Claude Code reports stale values
-# Model display names → actual context window tokens
-model_lower=$(echo "$model" | tr '[:upper:]' '[:lower:]')
-case "$model_lower" in
-    *opus*|*sonnet*|*claude*) actual_window=1000000 ;;
-    *gemini*)                 actual_window=2000000 ;;
-    *)                        actual_window="" ;;
-esac
-if [ -n "$actual_window" ] && [ -n "$window_size" ] && [ "$actual_window" -gt "$window_size" ]; then
-    window_size=$actual_window
-    # Recalculate percentage with corrected window size
-    if [ -n "$input_tokens" ]; then
-        used_pct=$(( (input_tokens * 100) / window_size ))
-    fi
-fi
+# Calculate total tokens used in context (sum of all current_usage token fields)
+input_tokens=$(echo "$input" | jq -r '
+    .context_window.current_usage |
+    ((.input_tokens // 0) + (.cache_creation_input_tokens // 0) + (.cache_read_input_tokens // 0) + (.output_tokens // 0))
+')
+[ "$input_tokens" = "null" ] || [ "$input_tokens" = "0" ] && {
+    # Fallback to total_input_tokens if current_usage sum is zero
+    input_tokens=$(echo "$input" | jq -r '.context_window.total_input_tokens // empty')
+}
 
 ctx_gauge=''
-if [ -n "$used_pct" ] && [ -n "$input_tokens" ] && [ -n "$window_size" ]; then
-    # Dial icon based on quartile
-    if [ "$used_pct" -lt 25 ]; then
+if [ -n "$used_pct" ] && [ -n "$window_size" ]; then
+    # Dial icon based on health zone
+    if [ "$used_pct" -lt 30 ]; then
         dial='◔'
-    elif [ "$used_pct" -lt 50 ]; then
+    elif [ "$used_pct" -lt 60 ]; then
         dial='◑'
-    elif [ "$used_pct" -lt 75 ]; then
-        dial='◶'
     else
         dial='●'
     fi
 
-    # Colour based on usage (ANSI escape codes)
-    if [ "$used_pct" -lt 50 ]; then
-        colour='\033[32m'  # green
-    elif [ "$used_pct" -lt 75 ]; then
-        colour='\033[33m'  # yellow
-    elif [ "$used_pct" -lt 90 ]; then
-        colour='\033[38;5;208m'  # orange
+    # Colour and health recommendation based on context usage
+    if [ "$used_pct" -lt 30 ]; then
+        colour='\033[32m'  # green - healthy
+        health_hint=''
+    elif [ "$used_pct" -lt 60 ]; then
+        colour='\033[33m'  # amber - consider compacting
+        health_hint=' ⚠ compact soon'
     else
-        colour='\033[31m'  # red
+        colour='\033[31m'  # red - compact/clear/new chat
+        health_hint=' 🛑 compact or new chat'
     fi
     reset='\033[0m'
 
@@ -85,33 +77,27 @@ if [ -n "$used_pct" ] && [ -n "$input_tokens" ] && [ -n "$window_size" ]; then
     done
 
     # Compact token display (e.g. 98k/200k)
-    if [ "$input_tokens" -ge 1000000 ]; then
-        used_display="$(( input_tokens / 1000000 )).$(( (input_tokens % 1000000) / 100000 ))M"
-    elif [ "$input_tokens" -ge 1000 ]; then
-        used_display="$(( input_tokens / 1000 ))k"
-    else
-        used_display="$input_tokens"
+    token_display=''
+    if [ -n "$input_tokens" ] && [ "$input_tokens" != "0" ]; then
+        if [ "$input_tokens" -ge 1000000 ]; then
+            used_display="$(( input_tokens / 1000000 )).$(( (input_tokens % 1000000) / 100000 ))M"
+        elif [ "$input_tokens" -ge 1000 ]; then
+            used_display="$(( input_tokens / 1000 ))k"
+        else
+            used_display="$input_tokens"
+        fi
+
+        if [ "$window_size" -ge 1000000 ]; then
+            total_display="$(( window_size / 1000000 )).$(( (window_size % 1000000) / 100000 ))M"
+        elif [ "$window_size" -ge 1000 ]; then
+            total_display="$(( window_size / 1000 ))k"
+        else
+            total_display="$window_size"
+        fi
+        token_display=" ${used_display}/${total_display}"
     fi
 
-    if [ "$window_size" -ge 1000000 ]; then
-        total_display="$(( window_size / 1000000 )).$(( (window_size % 1000000) / 100000 ))M"
-    elif [ "$window_size" -ge 1000 ]; then
-        total_display="$(( window_size / 1000 ))k"
-    else
-        total_display="$window_size"
-    fi
-
-    ctx_gauge=$(printf "${colour}${dial} ${used_pct}%% ${bar} ${used_display}/${total_display}${reset}")
-fi
-
-# Session cost
-session_cost=$(echo "$input" | jq -r '.cost.total_cost_usd // empty')
-cost_display=''
-if [ -n "$session_cost" ]; then
-    # Convert USD to AUD (update rate periodically)
-    usd_to_aud=1.42
-    session_cost_aud=$(printf "%.2f" "$(echo "$session_cost * $usd_to_aud" | bc)")
-    cost_display=$(printf "\033[33mA\$%s\033[0m" "$session_cost_aud")
+    ctx_gauge=$(printf "${colour}${dial} ${used_pct}%% ${bar}${token_display}${health_hint}${reset}")
 fi
 
 # Session duration
@@ -181,12 +167,9 @@ fi
 # Assemble final status line: context gauge | cost | duration | main parts
 output="$status_parts"
 
-# Prepend duration, cost, and context gauge (right to left so order is gauge | cost | duration | ...)
+# Prepend duration and context gauge (right to left so order is gauge | duration | ...)
 if [ -n "$duration_display" ]; then
     output="${duration_display} | ${output}"
-fi
-if [ -n "$cost_display" ]; then
-    output="${cost_display} | ${output}"
 fi
 if [ -n "$ctx_gauge" ]; then
     output="${ctx_gauge} | ${output}"
