@@ -7,6 +7,29 @@ model=$(echo "$input" | jq -r '.model.display_name')
 output_style=$(echo "$input" | jq -r '.output_style.name')
 project_dir=$(echo "$input" | jq -r '.workspace.project_dir')
 
+# Session agent identity (set by ~/.claude/hooks.global/session-identity.sh)
+agent_name=''
+agent_display=''
+identity_file="$HOME/.claude/state/current-session-identity.json"
+if [ -f "$identity_file" ]; then
+    agent_name=$(jq -r '.agent_name // empty' "$identity_file" 2>/dev/null)
+    agent_colour=$(jq -r '.color // empty' "$identity_file" 2>/dev/null)
+    if [ -n "$agent_name" ]; then
+        case "$agent_colour" in
+            red)    agent_ansi='\033[1;38;5;196m' ;;
+            blue)   agent_ansi='\033[1;38;5;39m'  ;;
+            green)  agent_ansi='\033[1;38;5;34m'  ;;
+            yellow) agent_ansi='\033[1;38;5;220m' ;;
+            purple) agent_ansi='\033[1;38;5;135m' ;;
+            orange) agent_ansi='\033[1;38;5;208m' ;;
+            pink)   agent_ansi='\033[1;38;5;205m' ;;
+            cyan)   agent_ansi='\033[1;38;5;51m'  ;;
+            *)      agent_ansi='\033[1m'          ;;
+        esac
+        agent_display=$(printf "${agent_ansi}◆ %s\033[0m" "$agent_name")
+    fi
+fi
+
 # Reasoning effort (may appear at top level or nested; default based on model)
 reasoning_effort=$(echo "$input" | jq -r '.reasoning_effort // .model.reasoning_effort // .output_style.reasoning_effort // empty')
 if [ -z "$reasoning_effort" ]; then
@@ -173,11 +196,16 @@ if git -C "$project_dir" rev-parse --git-dir > /dev/null 2>&1; then
     fi
 fi
 
-# Single status line: context gauge | model | effort | files | lines | duration
+# Single status line: agent | context gauge | model | effort | files | lines | duration
 output=''
 
+if [ -n "$agent_display" ]; then
+    output="$agent_display"
+fi
+
 if [ -n "$ctx_gauge" ]; then
-    output="$ctx_gauge"
+    [ -n "$output" ] && output="${output} | "
+    output="${output}${ctx_gauge}"
 fi
 
 [ -n "$output" ] && output="${output} | "
