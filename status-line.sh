@@ -14,6 +14,8 @@ identity_file="$HOME/.claude/state/current-session-identity.json"
 if [ -f "$identity_file" ]; then
     agent_name=$(jq -r '.agent_name // empty' "$identity_file" 2>/dev/null)
     agent_colour=$(jq -r '.color // empty' "$identity_file" 2>/dev/null)
+    agent_emoji=$(jq -r '.emoji // empty' "$identity_file" 2>/dev/null)
+    [ -z "$agent_emoji" ] && agent_emoji='◆'
     if [ -n "$agent_name" ]; then
         case "$agent_colour" in
             red)    agent_ansi='\033[1;38;5;196m' ;;
@@ -26,7 +28,7 @@ if [ -f "$identity_file" ]; then
             cyan)   agent_ansi='\033[1;38;5;51m'  ;;
             *)      agent_ansi='\033[1m'          ;;
         esac
-        agent_display=$(printf "${agent_ansi}◆ %s\033[0m" "$agent_name")
+        agent_display=$(printf "${agent_ansi}%s %s\033[0m" "$agent_emoji" "$agent_name")
     fi
 fi
 
