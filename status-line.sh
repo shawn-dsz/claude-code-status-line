@@ -113,21 +113,17 @@ if [ -n "$used_pct" ] && [ -n "$window_size" ]; then
     fi
     reset='\033[0m'
 
-    # Mini bar graph (8 blocks for visual resolution)
-    blocks='▁▂▃▄▅▆▇█'
-    # Calculate how many of 8 segments are filled
-    filled=$(( (used_pct * 8 + 50) / 100 ))
-    [ "$filled" -lt 1 ] && filled=1
-    [ "$filled" -gt 8 ] && filled=8
+    # Filled brick bar (10 blocks: █ filled, ░ empty)
+    filled=$(( (used_pct * 10 + 50) / 100 ))
+    [ "$filled" -lt 0 ] && filled=0
+    [ "$filled" -gt 10 ] && filled=10
     bar=''
     i=1
-    while [ "$i" -le 8 ]; do
+    while [ "$i" -le 10 ]; do
         if [ "$i" -le "$filled" ]; then
-            # Extract the block character at position $filled (use the highest filled level)
-            char=$(echo "$blocks" | cut -c"$i")
-            bar="${bar}${char}"
+            bar="${bar}█"
         else
-            bar="${bar}▁"
+            bar="${bar}░"
         fi
         i=$((i + 1))
     done
@@ -153,7 +149,7 @@ if [ -n "$used_pct" ] && [ -n "$window_size" ]; then
         token_display=" ${used_display}/${total_display}"
     fi
 
-    ctx_gauge=$(printf "${colour}${dial} ${used_pct}%% ${bar}${token_display}${health_hint}${reset}")
+    ctx_gauge=$(printf "${colour}${bar} ${used_pct}%%${token_display}${health_hint}${reset}")
 fi
 
 # Session duration
@@ -198,23 +194,30 @@ if git -C "$project_dir" rev-parse --git-dir > /dev/null 2>&1; then
     fi
 fi
 
-# Single status line: agent | context gauge | model | effort | files | lines | duration
-output=''
+# Line 1: agent | context gauge | model | effort
+line1=''
 
 if [ -n "$agent_display" ]; then
-    output="$agent_display"
+    line1="$agent_display"
 fi
 
 if [ -n "$ctx_gauge" ]; then
-    [ -n "$output" ] && output="${output} | "
-    output="${output}${ctx_gauge}"
+    [ -n "$line1" ] && line1="${line1} | "
+    line1="${line1}${ctx_gauge}"
 fi
 
-[ -n "$output" ] && output="${output} | "
-output=$(printf "%s\033[36m%s\033[0m" "$output" "$model")
+[ -n "$line1" ] && line1="${line1} | "
+line1=$(printf "%s\033[36m%s\033[0m" "$line1" "$model")
 
 if [ -n "$effort_display" ]; then
-    output=$(printf "%s | %s" "$output" "$effort_display")
+    line1=$(printf "%s | %s" "$line1" "$effort_display")
+fi
+
+# Line 2: git branch | files | lines | duration | cost
+line2=''
+
+if [ -n "$git_branch" ]; then
+    line2=$(printf "\033[38;5;245m%s\033[0m" "$git_branch")
 fi
 
 if [ -n "$files_changed" ]; then
@@ -232,11 +235,32 @@ if [ -n "$files_changed" ]; then
     else
         file_colour='\033[38;5;160m'   # dark red
     fi
-    output=$(printf "%s | ${file_colour}%s files\033[0m \033[36m%s\033[0m" "$output" "$files_changed" "$lines_changed")
+    [ -n "$line2" ] && line2="${line2} | "
+    line2=$(printf "%s${file_colour}%s files\033[0m \033[36m%s\033[0m" "$line2" "$files_changed" "$lines_changed")
 fi
 
 if [ -n "$duration_display" ]; then
-    output="${output} | ${duration_display}"
+    [ -n "$line2" ] && line2="${line2} | "
+    line2="${line2}${duration_display}"
 fi
 
-echo "$output"
+# Message count (maintained by message-counter.sh UserPromptSubmit hook)
+msg_count_file="$HOME/.claude/state/current-message-count"
+if [ -f "$msg_count_file" ]; then
+    msg_count=$(cat "$msg_count_file" 2>/dev/null)
+    if [[ "$msg_count" =~ ^[0-9]+$ ]] && [ "$msg_count" -gt 0 ]; then
+        [ -n "$line2" ] && line2="${line2} | "
+        line2=$(printf "%s\033[38;5;245m💬%s\033[0m" "$line2" "$msg_count")
+    fi
+fi
+
+# Session cost
+session_cost=$(echo "$input" | jq -r '.cost.total_cost_usd // empty')
+if [ -n "$session_cost" ] && [ "$session_cost" != "0" ]; then
+    usd_to_aud=1.42
+    session_cost_aud=$(printf "%.2f" "$(echo "$session_cost * $usd_to_aud" | bc)")
+    [ -n "$line2" ] && line2="${line2} | "
+    line2=$(printf "%s\033[33mA\$%s\033[0m" "$line2" "$session_cost_aud")
+fi
+
+printf "%s\n%s\n" "$line1" "$line2"
