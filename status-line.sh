@@ -6,6 +6,7 @@ input=$(cat)
 model=$(echo "$input" | jq -r '.model.display_name')
 output_style=$(echo "$input" | jq -r '.output_style.name')
 project_dir=$(echo "$input" | jq -r '.workspace.project_dir')
+transcript_path=$(echo "$input" | jq -r '.transcript_path // empty')
 
 # Session agent identity (set by ~/.claude/hooks.global/session-identity.sh)
 agent_name=''
@@ -244,14 +245,33 @@ if [ -n "$duration_display" ]; then
     line2="${line2}${duration_display}"
 fi
 
-# Message count (maintained by message-counter.sh UserPromptSubmit hook)
-msg_count_file="$HOME/.claude/state/current-message-count"
-if [ -f "$msg_count_file" ]; then
-    msg_count=$(cat "$msg_count_file" 2>/dev/null)
-    if [[ "$msg_count" =~ ^[0-9]+$ ]] && [ "$msg_count" -gt 0 ]; then
-        [ -n "$line2" ] && line2="${line2} | "
-        line2=$(printf "%s\033[38;5;245m💬%s\033[0m" "$line2" "$msg_count")
-    fi
+# Message count: count actual human prompts (string content, non-sidechain, external)
+# from the session transcript provided by Claude Code
+msg_count=''
+if [ -n "$transcript_path" ] && [ -f "$transcript_path" ] && command -v python3 >/dev/null 2>&1; then
+    msg_count=$(python3 -c "
+import json, sys
+count = 0
+try:
+    with open('$transcript_path') as f:
+        for line in f:
+            try:
+                obj = json.loads(line)
+                if (obj.get('type') == 'user' and
+                    obj.get('userType') == 'external' and
+                    not obj.get('isSidechain', False) and
+                    isinstance(obj.get('message', {}).get('content', ''), str)):
+                    count += 1
+            except Exception:
+                pass
+except Exception:
+    pass
+print(count)
+" 2>/dev/null)
+fi
+if [[ "$msg_count" =~ ^[0-9]+$ ]] && [ "$msg_count" -gt 0 ]; then
+    [ -n "$line2" ] && line2="${line2} | "
+    line2=$(printf "%s\033[38;5;245m💬%s\033[0m" "$line2" "$msg_count")
 fi
 
 # Session cost
