@@ -296,7 +296,7 @@ if last_ts:
     try:
         dt = datetime.fromisoformat(last_ts.replace('Z', '+00:00'))
         local_dt = dt.astimezone()
-        print(local_dt.strftime('%H:%M'))
+        print(local_dt.strftime('%-I:%M%p').lower())
     except Exception:
         pass
 " 2>/dev/null)
