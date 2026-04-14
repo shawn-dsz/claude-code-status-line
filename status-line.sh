@@ -274,7 +274,7 @@ if [[ "$msg_count" =~ ^[0-9]+$ ]] && [ "$msg_count" -gt 0 ]; then
     line2=$(printf "%s\033[38;5;245m💬%s\033[0m" "$line2" "$msg_count")
 fi
 
-# Last response time: find most recent assistant message timestamp and show relative time
+# Last response time: find most recent assistant message timestamp and show local time
 last_heard=''
 if [ -n "$transcript_path" ] && [ -f "$transcript_path" ] && command -v python3 >/dev/null 2>&1; then
     last_heard=$(python3 -c "
@@ -295,20 +295,8 @@ except Exception:
 if last_ts:
     try:
         dt = datetime.fromisoformat(last_ts.replace('Z', '+00:00'))
-        now = datetime.now(timezone.utc)
-        delta = int((now - dt).total_seconds())
-        if delta < 0:
-            delta = 0
-        if delta < 60:
-            print(f'{delta}s ago')
-        elif delta < 3600:
-            print(f'{delta // 60}m ago')
-        elif delta < 86400:
-            h = delta // 3600
-            m = (delta % 3600) // 60
-            print(f'{h}h{m:02d}m ago')
-        else:
-            print(f'{delta // 86400}d ago')
+        local_dt = dt.astimezone()
+        print(local_dt.strftime('%H:%M'))
     except Exception:
         pass
 " 2>/dev/null)
