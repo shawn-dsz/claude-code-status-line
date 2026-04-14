@@ -8,29 +8,39 @@ output_style=$(echo "$input" | jq -r '.output_style.name')
 project_dir=$(echo "$input" | jq -r '.workspace.project_dir')
 transcript_path=$(echo "$input" | jq -r '.transcript_path // empty')
 
-# Session agent identity (set by ~/.claude/hooks.global/session-identity.sh)
-agent_name=''
+# Session identity
+session_id=$(echo "$input" | jq -r '.session_id // empty')
 agent_display=''
+instance_display=''
 identity_file="$HOME/.claude/state/current-session-identity.json"
+agent_colour=''
+agent_emoji='◆'
+agent_name=''
 if [ -f "$identity_file" ]; then
     agent_name=$(jq -r '.agent_name // empty' "$identity_file" 2>/dev/null)
     agent_colour=$(jq -r '.color // empty' "$identity_file" 2>/dev/null)
-    agent_emoji=$(jq -r '.emoji // empty' "$identity_file" 2>/dev/null)
-    [ -z "$agent_emoji" ] && agent_emoji='◆'
-    if [ -n "$agent_name" ]; then
-        case "$agent_colour" in
-            red)    agent_ansi='\033[1;38;5;196m' ;;
-            blue)   agent_ansi='\033[1;38;5;39m'  ;;
-            green)  agent_ansi='\033[1;38;5;34m'  ;;
-            yellow) agent_ansi='\033[1;38;5;220m' ;;
-            purple) agent_ansi='\033[1;38;5;135m' ;;
-            orange) agent_ansi='\033[1;38;5;208m' ;;
-            pink)   agent_ansi='\033[1;38;5;205m' ;;
-            cyan)   agent_ansi='\033[1;38;5;51m'  ;;
-            *)      agent_ansi='\033[1m'          ;;
-        esac
-        agent_display=$(printf "${agent_ansi}%s %s\033[0m" "$agent_emoji" "$agent_name")
-    fi
+    file_emoji=$(jq -r '.emoji // empty' "$identity_file" 2>/dev/null)
+    [ -n "$file_emoji" ] && agent_emoji="$file_emoji"
+fi
+case "$agent_colour" in
+    red)    agent_ansi='\033[1;38;5;196m' ;;
+    blue)   agent_ansi='\033[1;38;5;39m'  ;;
+    green)  agent_ansi='\033[1;38;5;34m'  ;;
+    yellow) agent_ansi='\033[1;38;5;220m' ;;
+    purple) agent_ansi='\033[1;38;5;135m' ;;
+    orange) agent_ansi='\033[1;38;5;208m' ;;
+    pink)   agent_ansi='\033[1;38;5;205m' ;;
+    cyan)   agent_ansi='\033[1;38;5;51m'  ;;
+    *)      agent_ansi='\033[1m'          ;;
+esac
+# Agent name for line 1
+if [ -n "$agent_name" ]; then
+    agent_display=$(printf "${agent_ansi}%s %s\033[0m" "$agent_emoji" "$agent_name")
+fi
+# Short instance ID for line 2
+if [ -n "$session_id" ]; then
+    short_id="${session_id:0:8}"
+    instance_display=$(printf "${agent_ansi}%s\033[0m" "$short_id")
 fi
 
 # Reasoning effort (may appear at top level or nested; default based on model)
@@ -214,11 +224,16 @@ if [ -n "$effort_display" ]; then
     line1=$(printf "%s | %s" "$line1" "$effort_display")
 fi
 
-# Line 2: git branch | files | lines | duration | cost
+# Line 2: instance_id | git branch | files | lines | duration | cost
 line2=''
 
+if [ -n "$instance_display" ]; then
+    line2="$instance_display"
+fi
+
 if [ -n "$git_branch" ]; then
-    line2=$(printf "\033[38;5;245m%s\033[0m" "$git_branch")
+    [ -n "$line2" ] && line2="${line2} | "
+    line2=$(printf "%s\033[38;5;245m%s\033[0m" "$line2" "$git_branch")
 fi
 
 if [ -n "$files_changed" ]; then
