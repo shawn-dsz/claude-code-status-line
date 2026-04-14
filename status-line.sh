@@ -274,6 +274,50 @@ if [[ "$msg_count" =~ ^[0-9]+$ ]] && [ "$msg_count" -gt 0 ]; then
     line2=$(printf "%s\033[38;5;245m💬%s\033[0m" "$line2" "$msg_count")
 fi
 
+# Last response time: find most recent assistant message timestamp and show relative time
+last_heard=''
+if [ -n "$transcript_path" ] && [ -f "$transcript_path" ] && command -v python3 >/dev/null 2>&1; then
+    last_heard=$(python3 -c "
+import json, sys
+from datetime import datetime, timezone
+last_ts = None
+try:
+    with open('$transcript_path') as f:
+        for line in f:
+            try:
+                obj = json.loads(line)
+                if obj.get('type') == 'assistant' and obj.get('timestamp'):
+                    last_ts = obj['timestamp']
+            except Exception:
+                pass
+except Exception:
+    pass
+if last_ts:
+    try:
+        dt = datetime.fromisoformat(last_ts.replace('Z', '+00:00'))
+        now = datetime.now(timezone.utc)
+        delta = int((now - dt).total_seconds())
+        if delta < 0:
+            delta = 0
+        if delta < 60:
+            print(f'{delta}s ago')
+        elif delta < 3600:
+            print(f'{delta // 60}m ago')
+        elif delta < 86400:
+            h = delta // 3600
+            m = (delta % 3600) // 60
+            print(f'{h}h{m:02d}m ago')
+        else:
+            print(f'{delta // 86400}d ago')
+    except Exception:
+        pass
+" 2>/dev/null)
+fi
+if [ -n "$last_heard" ]; then
+    [ -n "$line2" ] && line2="${line2} | "
+    line2=$(printf "%s\033[38;5;245m🕐%s\033[0m" "$line2" "$last_heard")
+fi
+
 # Session cost
 session_cost=$(echo "$input" | jq -r '.cost.total_cost_usd // empty')
 if [ -n "$session_cost" ] && [ "$session_cost" != "0" ]; then
