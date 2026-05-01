@@ -205,16 +205,11 @@ if git -C "$project_dir" rev-parse --git-dir > /dev/null 2>&1; then
     fi
 fi
 
-# Line 1: agent | context gauge | model | effort
+# Line 1: context gauge | model | effort | agent
 line1=''
 
-if [ -n "$agent_display" ]; then
-    line1="$agent_display"
-fi
-
 if [ -n "$ctx_gauge" ]; then
-    [ -n "$line1" ] && line1="${line1} | "
-    line1="${line1}${ctx_gauge}"
+    line1="${ctx_gauge}"
 fi
 
 [ -n "$line1" ] && line1="${line1} | "
@@ -224,16 +219,16 @@ if [ -n "$effort_display" ]; then
     line1=$(printf "%s | %s" "$line1" "$effort_display")
 fi
 
-# Line 2: instance_id | git branch | files | lines | duration | cost
-line2=''
-
-if [ -n "$instance_display" ]; then
-    line2="$instance_display"
+if [ -n "$agent_display" ]; then
+    [ -n "$line1" ] && line1="${line1} | "
+    line1="${line1}${agent_display}"
 fi
 
+# Line 2: git branch | files | lines | duration | cost | instance_id
+line2=''
+
 if [ -n "$git_branch" ]; then
-    [ -n "$line2" ] && line2="${line2} | "
-    line2=$(printf "%s\033[38;5;245m%s\033[0m" "$line2" "$git_branch")
+    line2=$(printf "\033[38;5;245m%s\033[0m" "$git_branch")
 fi
 
 if [ -n "$files_changed" ]; then
@@ -328,6 +323,11 @@ if [ -n "$session_cost" ] && [ "$session_cost" != "0" ]; then
     session_cost_aud=$(printf "%.2f" "$(echo "$session_cost * $usd_to_aud" | bc)")
     [ -n "$line2" ] && line2="${line2} | "
     line2=$(printf "%s\033[33mA\$%s\033[0m" "$line2" "$session_cost_aud")
+fi
+
+if [ -n "$instance_display" ]; then
+    [ -n "$line2" ] && line2="${line2} | "
+    line2="${line2}${instance_display}"
 fi
 
 printf "%s\n%s\n" "$line1" "$line2"
