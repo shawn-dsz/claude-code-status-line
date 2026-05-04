@@ -44,7 +44,7 @@ if [ -n "$session_id" ]; then
 fi
 
 # Reasoning effort (may appear at top level or nested; default based on model)
-reasoning_effort=$(echo "$input" | jq -r '.reasoning_effort // .model.reasoning_effort // .output_style.reasoning_effort // empty')
+reasoning_effort=$(echo "$input" | jq -r '.effort.level // .reasoning_effort // .model.reasoning_effort // .output_style.reasoning_effort // empty')
 if [ -z "$reasoning_effort" ]; then
     # Default effort based on model
     model_lower=$(echo "$model" | tr '[:upper:]' '[:lower:]')
@@ -55,25 +55,32 @@ if [ -z "$reasoning_effort" ]; then
     esac
 fi
 case "$reasoning_effort" in
-    low)    effort_display=$(printf "\033[32m⚡low\033[0m") ;;    # green - fast
-    medium) effort_display=$(printf "\033[33m⚙ med\033[0m") ;;   # yellow - balanced
-    high)   effort_display=$(printf "\033[35m🧠high\033[0m") ;;   # magenta - deep
-    *)      effort_display=$(printf "\033[38;5;245m⚙ %s\033[0m" "$reasoning_effort") ;;  # grey - unknown
+    none)    effort_display=$(printf "\033[38;5;245m∅ none\033[0m") ;;  # grey - off
+    minimal) effort_display=$(printf "\033[36m⚡min\033[0m") ;;          # cyan - minimal
+    low)     effort_display=$(printf "\033[32m⚡low\033[0m") ;;          # green - fast
+    medium)  effort_display=$(printf "\033[33m⚙ med\033[0m") ;;         # yellow - balanced
+    high)    effort_display=$(printf "\033[35m🧠high\033[0m") ;;         # magenta - deep
+    xhigh)   effort_display=$(printf "\033[1;35m🧠xhigh\033[0m") ;;      # bold magenta - deeper
+    max)     effort_display=$(printf "\033[1;31m🧠max\033[0m") ;;        # bold red - deepest
+    *)       effort_display=$(printf "\033[38;5;245m⚙ %s\033[0m" "$reasoning_effort") ;;  # grey - unknown
 esac
 
 # Context window gauge
 used_pct=$(echo "$input" | jq -r '.context_window.used_percentage // empty')
 window_size=$(echo "$input" | jq -r '.context_window.context_window_size // empty')
 
-# Override known context window sizes when Claude Code reports stale values
+# Derive canonical window size from model name; correct stale values from Claude Code
 model_lower=$(echo "$model" | tr '[:upper:]' '[:lower:]')
 case "$model_lower" in
-    *opus*|*sonnet*|*claude*|*haiku*) actual_window=1000000 ;;
-    *gemini*)                         actual_window=2000000 ;;
-    *)                                actual_window="" ;;
+    *opus*)    canonical_window=1000000 ;;
+    *sonnet*)  canonical_window=200000  ;;
+    *haiku*)   canonical_window=200000  ;;
+    *gemini*)  canonical_window=2000000 ;;
+    *)         canonical_window=""      ;;
 esac
-if [ -n "$actual_window" ] && [ -n "$window_size" ] && [ "$actual_window" -gt "$window_size" ]; then
-    window_size=$actual_window
+# Use canonical size unconditionally when known -- ensures model switches are reflected immediately
+if [ -n "$canonical_window" ]; then
+    window_size=$canonical_window
 fi
 
 # Calculate total tokens used in context (sum of all current_usage token fields)
@@ -86,8 +93,8 @@ input_tokens=$(echo "$input" | jq -r '
     input_tokens=$(echo "$input" | jq -r '.context_window.total_input_tokens // empty')
 }
 
-# Recalculate percentage if window size was overridden
-if [ -n "$actual_window" ] && [ -n "$input_tokens" ] && [ "$input_tokens" != "0" ] && [ -n "$window_size" ]; then
+# Recalculate percentage using the authoritative window size
+if [ -n "$window_size" ] && [ -n "$input_tokens" ] && [ "$input_tokens" != "0" ]; then
     used_pct=$(( (input_tokens * 100) / window_size ))
 fi
 
