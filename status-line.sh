@@ -239,22 +239,29 @@ if [ -n "$git_branch" ]; then
 fi
 
 if [ -n "$files_changed" ]; then
-    # Heat gradient: green (0 files) -> yellow -> orange -> red (10+ files)
-    if [ "$files_changed" -eq 0 ]; then
-        file_colour='\033[38;5;34m'    # green
-    elif [ "$files_changed" -le 2 ]; then
-        file_colour='\033[38;5;112m'   # light green
-    elif [ "$files_changed" -le 4 ]; then
-        file_colour='\033[38;5;220m'   # yellow
-    elif [ "$files_changed" -le 6 ]; then
-        file_colour='\033[38;5;208m'   # orange
-    elif [ "$files_changed" -le 9 ]; then
-        file_colour='\033[38;5;196m'   # red
-    else
-        file_colour='\033[38;5;160m'   # dark red
-    fi
     [ -n "$line2" ] && line2="${line2} | "
-    line2=$(printf "%s${file_colour}%s files\033[0m \033[36m%s\033[0m" "$line2" "$files_changed" "$lines_changed")
+    if [ "$files_changed" -eq 0 ]; then
+        line2=$(printf "%s\033[38;5;34m✓ clean\033[0m" "$line2")
+    else
+        # Heat gradient + commit reminder, similar to context gauge
+        if [ "$files_changed" -le 2 ]; then
+            file_colour='\033[38;5;112m'   # light green - small change
+            dirty_hint=''
+        elif [ "$files_changed" -le 4 ]; then
+            file_colour='\033[38;5;220m'   # yellow - getting big
+            dirty_hint=' ⚠ commit soon'
+        elif [ "$files_changed" -le 6 ]; then
+            file_colour='\033[38;5;208m'   # orange - commit soon
+            dirty_hint=' ⚠ commit soon'
+        elif [ "$files_changed" -le 9 ]; then
+            file_colour='\033[38;5;196m'   # red - commit now
+            dirty_hint=' 🛑 commit now'
+        else
+            file_colour='\033[38;5;160m'   # dark red - critical
+            dirty_hint=' 🛑 commit now'
+        fi
+        line2=$(printf "%s${file_colour}%s files\033[0m \033[36m%s\033[0m${file_colour}${dirty_hint}\033[0m" "$line2" "$files_changed" "$lines_changed")
+    fi
 fi
 
 if [ -n "$duration_display" ]; then
