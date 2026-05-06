@@ -220,6 +220,39 @@ if git -C "$project_dir" rev-parse --git-dir > /dev/null 2>&1; then
     fi
 fi
 
+# Linear ticket link: extract first [A-Z]+-[0-9]+ from branch or worktree path,
+# look up workspace from .claude/linear.json (searched up the tree from project_dir),
+# render as OSC 8 hyperlink to linear://issue/<ID> so the desktop app opens.
+linear_display=''
+if [ -n "$git_branch" ] || [ -n "$project_dir" ]; then
+    ticket_source="$git_branch $(basename "$project_dir" 2>/dev/null)"
+    linear_ticket=$(echo "$ticket_source" | grep -oE '[A-Z]+-[0-9]+' | head -n1)
+
+    if [ -n "$linear_ticket" ]; then
+        # Search for .claude/linear.json walking up from project_dir
+        config_dir="$project_dir"
+        linear_config=''
+        while [ -n "$config_dir" ] && [ "$config_dir" != "/" ]; do
+            if [ -f "$config_dir/.claude/linear.json" ]; then
+                linear_config="$config_dir/.claude/linear.json"
+                break
+            fi
+            config_dir=$(dirname "$config_dir")
+        done
+
+        if [ -n "$linear_config" ]; then
+            linear_workspace=$(jq -r '.workspace // empty' "$linear_config" 2>/dev/null)
+            if [ -n "$linear_workspace" ]; then
+                # OSC 8 hyperlink: ESC ] 8 ;; URL ESC \ TEXT ESC ] 8 ;; ESC \
+                linear_url="linear://issue/${linear_ticket}"
+                esc=$(printf '\033')
+                bel=$(printf '\033\\')
+                linear_display=$(printf "%s]8;;%s%s\033[38;5;141m🎫%s\033[0m%s]8;;%s" "$esc" "$linear_url" "$bel" "$linear_ticket" "$esc" "$bel")
+            fi
+        fi
+    fi
+fi
+
 # Line 1: context gauge | model | effort
 line1=''
 
@@ -239,6 +272,11 @@ line2=''
 
 if [ -n "$git_branch" ]; then
     line2=$(printf "\033[38;5;245m%s\033[0m" "$git_branch")
+fi
+
+if [ -n "$linear_display" ]; then
+    [ -n "$line2" ] && line2="${line2} | "
+    line2="${line2}${linear_display}"
 fi
 
 if [ -n "$ahead_count" ] && [ "$ahead_count" -gt 0 ]; then
