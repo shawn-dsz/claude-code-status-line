@@ -220,16 +220,18 @@ if git -C "$project_dir" rev-parse --git-dir > /dev/null 2>&1; then
     fi
 fi
 
-# Linear ticket link: extract first [A-Z]+-[0-9]+ from branch or worktree path,
-# look up workspace from .claude/linear.json (searched up the tree from project_dir),
-# render as OSC 8 hyperlink to linear://issue/<ID> so the desktop app opens.
+# Linear ticket link: extract first [A-Za-z]+-[0-9]+ from branch or worktree path,
+# look up workspace from .claude/linear.json. Search order:
+#   1. Walk up from project_dir
+#   2. The git common dir (main worktree) if project_dir is a linked worktree
+# Render as OSC 8 hyperlink to linear://issue/<ID> so the desktop app opens.
 linear_display=''
 if [ -n "$git_branch" ] || [ -n "$project_dir" ]; then
     ticket_source="$git_branch $(basename "$project_dir" 2>/dev/null)"
-    linear_ticket=$(echo "$ticket_source" | grep -oE '[A-Z]+-[0-9]+' | head -n1)
+    linear_ticket=$(echo "$ticket_source" | grep -oE '[A-Za-z]+-[0-9]+' | head -n1 | tr '[:lower:]' '[:upper:]')
 
     if [ -n "$linear_ticket" ]; then
-        # Search for .claude/linear.json walking up from project_dir
+        # 1. Walk up from project_dir
         config_dir="$project_dir"
         linear_config=''
         while [ -n "$config_dir" ] && [ "$config_dir" != "/" ]; do
@@ -239,6 +241,21 @@ if [ -n "$git_branch" ] || [ -n "$project_dir" ]; then
             fi
             config_dir=$(dirname "$config_dir")
         done
+
+        # 2. Fallback: check the main worktree via git common dir
+        if [ -z "$linear_config" ] && git -C "$project_dir" rev-parse --git-dir > /dev/null 2>&1; then
+            common_dir=$(git -C "$project_dir" rev-parse --git-common-dir 2>/dev/null)
+            if [ -n "$common_dir" ]; then
+                # common_dir may be relative to project_dir
+                case "$common_dir" in
+                    /*) main_repo=$(dirname "$common_dir") ;;
+                    *)  main_repo=$(cd "$project_dir/$common_dir/.." 2>/dev/null && pwd) ;;
+                esac
+                if [ -n "$main_repo" ] && [ -f "$main_repo/.claude/linear.json" ]; then
+                    linear_config="$main_repo/.claude/linear.json"
+                fi
+            fi
+        fi
 
         if [ -n "$linear_config" ]; then
             linear_workspace=$(jq -r '.workspace // empty' "$linear_config" 2>/dev/null)
