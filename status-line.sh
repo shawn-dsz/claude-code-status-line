@@ -224,7 +224,8 @@ fi
 # look up workspace from .claude/linear.json. Search order:
 #   1. Walk up from project_dir
 #   2. The git common dir (main worktree) if project_dir is a linked worktree
-# Render as OSC 8 hyperlink to linear://issue/<ID> so the desktop app opens.
+# Render as a plain https URL so Claude Code auto-linkifies it (cmd-click opens
+# Linear desktop app on macOS, which handles linear.app URLs natively).
 linear_display=''
 if [ -n "$git_branch" ] || [ -n "$project_dir" ]; then
     ticket_source="$git_branch $(basename "$project_dir" 2>/dev/null)"
@@ -260,11 +261,8 @@ if [ -n "$git_branch" ] || [ -n "$project_dir" ]; then
         if [ -n "$linear_config" ]; then
             linear_workspace=$(jq -r '.workspace // empty' "$linear_config" 2>/dev/null)
             if [ -n "$linear_workspace" ]; then
-                # OSC 8 hyperlink: ESC ] 8 ;; URL ESC \ TEXT ESC ] 8 ;; ESC \
-                linear_url="linear://issue/${linear_ticket}"
-                esc=$(printf '\033')
-                bel=$(printf '\033\\')
-                linear_display=$(printf "%s]8;;%s%s\033[38;5;141m🎫%s\033[0m%s]8;;%s" "$esc" "$linear_url" "$bel" "$linear_ticket" "$esc" "$bel")
+                linear_url="https://linear.app/${linear_workspace}/issue/${linear_ticket}"
+                linear_display=$(printf "\033[38;5;141m🎫 %s\033[0m" "$linear_url")
             fi
         fi
     fi
