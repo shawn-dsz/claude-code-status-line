@@ -191,6 +191,7 @@ git_branch=''
 git_status=''
 files_changed=''
 lines_changed=''
+ahead_count='0'
 
 if git -C "$project_dir" rev-parse --git-dir > /dev/null 2>&1; then
     git_branch=$(git -C "$project_dir" rev-parse --abbrev-ref HEAD 2>/dev/null)
@@ -210,9 +211,16 @@ if git -C "$project_dir" rev-parse --git-dir > /dev/null 2>&1; then
     else
         lines_changed="$diff_stat"
     fi
+
+    # Commits ahead of upstream (unpushed)
+    upstream=$(git -C "$project_dir" rev-parse --abbrev-ref --symbolic-full-name @{u} 2>/dev/null)
+    if [ -n "$upstream" ]; then
+        ahead_count=$(git -C "$project_dir" rev-list --count "${upstream}..HEAD" 2>/dev/null)
+        [ -z "$ahead_count" ] && ahead_count='0'
+    fi
 fi
 
-# Line 1: context gauge | model | effort | agent
+# Line 1: context gauge | model | effort
 line1=''
 
 if [ -n "$ctx_gauge" ]; then
@@ -226,16 +234,29 @@ if [ -n "$effort_display" ]; then
     line1=$(printf "%s | %s" "$line1" "$effort_display")
 fi
 
-if [ -n "$agent_display" ]; then
-    [ -n "$line1" ] && line1="${line1} | "
-    line1="${line1}${agent_display}"
-fi
-
 # Line 2: git branch | files | lines | duration | cost | instance_id
 line2=''
 
 if [ -n "$git_branch" ]; then
     line2=$(printf "\033[38;5;245m%s\033[0m" "$git_branch")
+fi
+
+if [ -n "$ahead_count" ] && [ "$ahead_count" -gt 0 ]; then
+    if [ "$ahead_count" -le 2 ]; then
+        ahead_colour='\033[38;5;112m'   # light green
+        ahead_hint=''
+    elif [ "$ahead_count" -le 4 ]; then
+        ahead_colour='\033[38;5;220m'   # yellow
+        ahead_hint=' ⚠ push soon'
+    elif [ "$ahead_count" -le 6 ]; then
+        ahead_colour='\033[38;5;208m'   # orange
+        ahead_hint=' ⚠ push soon'
+    else
+        ahead_colour='\033[38;5;196m'   # red
+        ahead_hint=' 🛑 push now'
+    fi
+    [ -n "$line2" ] && line2="${line2} | "
+    line2=$(printf "%s${ahead_colour}↑%s unpushed${ahead_hint}\033[0m" "$line2" "$ahead_count")
 fi
 
 if [ -n "$files_changed" ]; then
