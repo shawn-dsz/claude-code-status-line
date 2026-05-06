@@ -262,7 +262,12 @@ if [ -n "$git_branch" ] || [ -n "$project_dir" ]; then
             linear_workspace=$(jq -r '.workspace // empty' "$linear_config" 2>/dev/null)
             if [ -n "$linear_workspace" ]; then
                 linear_url="https://linear.app/${linear_workspace}/issue/${linear_ticket}"
-                linear_display=$(printf "\033[38;5;141m🎫 %s\033[0m" "$linear_url")
+                # OSC 8 hyperlink: requires terminal hyperlink support.
+                # If link is not clickable, run claude with FORCE_HYPERLINK=1.
+                # Format matches Claude Code's own internal links.
+                esc=$(printf '\033')
+                st=$(printf '\033\\')
+                linear_display=$(printf "\033[38;5;141m🎫%s]8;;%s%s%s%s]8;;%s\033[0m" "$esc" "$linear_url" "$st" "$linear_ticket" "$esc" "$st")
             fi
         fi
     fi
