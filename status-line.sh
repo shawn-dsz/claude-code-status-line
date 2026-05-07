@@ -131,43 +131,7 @@ if [ -n "$used_pct" ] && [ -n "$window_size" ]; then
     fi
     reset='\033[0m'
 
-    # Filled brick bar (10 blocks: █ filled, ░ empty)
-    filled=$(( (used_pct * 10 + 50) / 100 ))
-    [ "$filled" -lt 0 ] && filled=0
-    [ "$filled" -gt 10 ] && filled=10
-    bar=''
-    i=1
-    while [ "$i" -le 10 ]; do
-        if [ "$i" -le "$filled" ]; then
-            bar="${bar}█"
-        else
-            bar="${bar}░"
-        fi
-        i=$((i + 1))
-    done
-
-    # Compact token display (e.g. 98k/200k)
-    token_display=''
-    if [ -n "$input_tokens" ] && [ "$input_tokens" != "0" ]; then
-        if [ "$input_tokens" -ge 1000000 ]; then
-            used_display="$(( input_tokens / 1000000 )).$(( (input_tokens % 1000000) / 100000 ))M"
-        elif [ "$input_tokens" -ge 1000 ]; then
-            used_display="$(( input_tokens / 1000 ))k"
-        else
-            used_display="$input_tokens"
-        fi
-
-        if [ "$window_size" -ge 1000000 ]; then
-            total_display="$(( window_size / 1000000 )).$(( (window_size % 1000000) / 100000 ))M"
-        elif [ "$window_size" -ge 1000 ]; then
-            total_display="$(( window_size / 1000 ))k"
-        else
-            total_display="$window_size"
-        fi
-        token_display=" ${used_display}/${total_display}"
-    fi
-
-    ctx_gauge=$(printf "${colour}${bar} ${used_pct}%%${token_display}${health_hint}${reset}")
+    ctx_gauge=$(printf "${colour}${dial} ${used_pct}%%${health_hint}${reset}")
 fi
 
 # Session duration
@@ -273,7 +237,7 @@ if [ -n "$git_branch" ] || [ -n "$project_dir" ]; then
     fi
 fi
 
-# Line 1: context gauge | model | effort
+# Line 1: context gauge | model | effort | week quota status
 line1=''
 
 if [ -n "$ctx_gauge" ]; then
@@ -287,16 +251,11 @@ if [ -n "$effort_display" ]; then
     line1=$(printf "%s | %s" "$line1" "$effort_display")
 fi
 
-# Line 2: git branch | files | lines | duration | cost | instance_id
+# Line 2: linear ticket | unpushed commits | files +/- | duration | cost | message count | last response | branch
 line2=''
 
-if [ -n "$git_branch" ]; then
-    line2=$(printf "\033[38;5;245m%s\033[0m" "$git_branch")
-fi
-
 if [ -n "$linear_display" ]; then
-    [ -n "$line2" ] && line2="${line2} | "
-    line2="${line2}${linear_display}"
+    line2="${linear_display}"
 fi
 
 if [ -n "$ahead_count" ] && [ "$ahead_count" -gt 0 ]; then
@@ -418,9 +377,87 @@ if [ -n "$session_cost" ] && [ "$session_cost" != "0" ]; then
     line2=$(printf "%s\033[33mA\$%s\033[0m" "$line2" "$session_cost_aud")
 fi
 
-if [ -n "$instance_display" ]; then
+# 7-day Anthropic Max quota pace (sourced from the Raycast "Claude Usage" extension cache).
+# Resolves the cache file path once and stores it in ~/.claude/state/seven-day-usage-cache-path
+# so we don't scan the cache directory on every render.
+week_display=''
+week_path_cache="$HOME/.claude/state/seven-day-usage-cache-path"
+week_data_file=''
+if [ -f "$week_path_cache" ]; then
+    candidate=$(cat "$week_path_cache" 2>/dev/null)
+    if [ -n "$candidate" ] && [ -f "$candidate" ] && head -c 30 "$candidate" 2>/dev/null | grep -q 'five_hour'; then
+        week_data_file="$candidate"
+    fi
+fi
+if [ -z "$week_data_file" ]; then
+    raycast_root="$HOME/Library/Application Support/com.raycast.macos/extensions"
+    if [ -d "$raycast_root" ]; then
+        for f in "$raycast_root"/*/com.raycast.api.cache/*; do
+            [ -f "$f" ] || continue
+            if head -c 30 "$f" 2>/dev/null | grep -q 'five_hour'; then
+                week_data_file="$f"
+                mkdir -p "$(dirname "$week_path_cache")"
+                printf '%s' "$f" > "$week_path_cache"
+                break
+            fi
+        done
+    fi
+fi
+
+week_render=''
+if [ -n "$week_data_file" ] && [ -f "$week_data_file" ]; then
+    week_util=$(jq -r '.seven_day.utilization // empty' "$week_data_file" 2>/dev/null)
+    week_reset=$(jq -r '.seven_day.resets_at // empty' "$week_data_file" 2>/dev/null)
+    if [ -n "$week_util" ] && [ -n "$week_reset" ] && command -v python3 >/dev/null 2>&1; then
+        week_stale='0'
+        if find "$week_data_file" -mmin +30 2>/dev/null | grep -q .; then
+            week_stale='1'
+        fi
+
+        week_render=$(WEEK_UTIL="$week_util" WEEK_RESET="$week_reset" WEEK_STALE="$week_stale" python3 - <<'PYEOF'
+import os
+from datetime import datetime, timezone
+
+util = float(os.environ['WEEK_UTIL'])
+reset = datetime.fromisoformat(os.environ['WEEK_RESET'].replace('Z', '+00:00'))
+stale = os.environ.get('WEEK_STALE') == '1'
+
+now = datetime.now(timezone.utc)
+window_h = 7 * 24
+hours_left = max(0.0, (reset - now).total_seconds() / 3600.0)
+progress = max(0.0, min(100.0, (window_h - hours_left) / window_h * 100.0))
+est = (util / progress * 100.0) if progress > 0 else util
+diff = util - progress  # negative = under pace, positive = over pace
+
+if est >= 100 and progress > 5:
+    fg = '38;5;196'
+    label = '\U0001f6d1 over pace'
+elif diff < -7:
+    fg = '38;5;34'
+    label = f'+{int(round(-diff))}% spare'
+elif diff > 7:
+    fg = '38;5;208'
+    label = f'-{int(round(diff))}% over'
+else:
+    fg = '38;5;220'
+    label = 'on track'
+
+if stale:
+    fg = '38;5;245'
+
+print(f'\x1b[{fg}m{label}\x1b[0m', end='')
+PYEOF
+)
+    fi
+fi
+
+if [ -n "$week_render" ]; then
+    line1="${line1} | ${week_render}"
+fi
+
+if [ -n "$git_branch" ]; then
     [ -n "$line2" ] && line2="${line2} | "
-    line2="${line2}${instance_display}"
+    line2=$(printf "%s\033[38;5;245m%s\033[0m" "$line2" "$git_branch")
 fi
 
 printf "%s\n%s\n" "$line1" "$line2"
