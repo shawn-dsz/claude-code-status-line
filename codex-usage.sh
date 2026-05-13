@@ -15,17 +15,16 @@ colour() {
 
 usage() {
     cat <<'EOF'
-Usage: codex-usage.sh [--file SESSION.jsonl] [--latest]
+Usage: codex-usage.sh [--file SESSION.jsonl] [--latest] [--full]
 
 Shows current Codex usage from Codex session JSONL:
-  - 5-hour and 7-day quota windows from token_count rate_limits
-  - session and last-turn token usage
-  - context-window percentage
-  - model, effort, message count, and workspace
+  - default: 7-day quota pace only, e.g. "7d 4% reset 5d12h · +17% spare"
+  - --full: model, effort, 5-hour quota, tokens, messages, and workspace
 EOF
 }
 
 session_file=''
+full_output='0'
 while [ "$#" -gt 0 ]; do
     case "$1" in
         --file)
@@ -34,6 +33,9 @@ while [ "$#" -gt 0 ]; do
             ;;
         --latest)
             session_file=''
+            ;;
+        --full)
+            full_output='1'
             ;;
         -h|--help)
             usage
@@ -224,6 +226,16 @@ secondary_window=$(jq_rate_limit '.rate_limits.secondary.window_minutes')
 plan_type=$(jq_rate_limit '.rate_limits.plan_type')
 limit_reached=$(jq_rate_limit '.rate_limits.rate_limit_reached_type')
 
+secondary_chunk=$(quota_chunk '7d' "$secondary_pct" "$secondary_reset" "$secondary_window")
+if [ "$full_output" != "1" ]; then
+    if [ -z "$secondary_chunk" ]; then
+        printf "No 7-day Codex quota data found\n" >&2
+        exit 1
+    fi
+    printf "%s\n" "$secondary_chunk"
+    exit 0
+fi
+
 messages=$(jq -r 'select(.type == "response_item" and .payload.type == "message" and .payload.role == "user") | .payload.role' "$session_file" | wc -l | tr -d ' ')
 workspace=$(basename "$cwd" 2>/dev/null || true)
 [ -z "$workspace" ] && workspace='unknown'
@@ -255,7 +267,6 @@ fi
 line1="${line1}$(colour '36' "$model") | ${effort_display}"
 
 primary_chunk=$(quota_chunk '5h' "$primary_pct" "$primary_reset" "$primary_window")
-secondary_chunk=$(quota_chunk '7d' "$secondary_pct" "$secondary_reset" "$secondary_window")
 [ -n "$primary_chunk" ] && line1="${line1} | ${primary_chunk}"
 [ -n "$secondary_chunk" ] && line1="${line1} | ${secondary_chunk}"
 if [ -n "$limit_reached" ] && [ "$limit_reached" != "null" ]; then

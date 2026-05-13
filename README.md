@@ -26,18 +26,12 @@ A visual status line script for [Claude Code](https://docs.anthropic.com/en/docs
 
 ## Codex Usage Tracker
 
-`codex-usage.sh` is a companion tracker for Codex Desktop/CLI. It reads Codex's local session JSONL logs under `~/.codex/sessions` and renders the latest session's:
-
-- **Context window percentage** from the latest turn usage against `token_count.info.model_context_window`
-- **5-hour and 7-day quota usage** from Codex `rate_limits`, falling back to the newest recent quota snapshot if the active session has null quota fields
-- **Session and last-turn token usage** split into input, cached input, output, and reasoning tokens
-- **Model, effort, message count, plan type, and workspace**
+`codex-usage.sh` is a companion tracker for Codex Desktop/CLI. It reads Codex's local session JSONL logs under `~/.codex/sessions` and renders the latest 7-day quota pace from Codex `rate_limits`, falling back to the newest recent quota snapshot if the active session has null quota fields.
 
 Preview:
 
 ```text
-◔ 28% ctx | gpt-5.5 | high | 5h 12% reset 2h14m | 7d 41% reset 5d03h · +4% spare
-Σ 72.2k tok | last 24.4k | in 70.8k cached 49.3k out 1.5k think 388 | msgs 5 | pro | TaluxIQ
+7d 4% reset 5d12h · +17% spare
 ```
 
 Run it directly:
@@ -58,6 +52,8 @@ For a plain, no-colour output suitable for scripts:
 ```bash
 NO_COLOR=1 ./codex-usage.sh
 ```
+
+For debugging, `./codex-usage.sh --full` also shows context percentage, 5-hour quota, token usage, model, effort, messages, plan type, and workspace.
 
 This is usage tracking, not invoice-grade billing. Codex session logs expose quota percentages and token counts, but not a stable per-turn dollar cost. If Codex later exposes official cost fields or a status-line hook, this script can adopt those without changing the display shape.
 
