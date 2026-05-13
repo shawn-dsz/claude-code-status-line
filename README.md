@@ -24,6 +24,43 @@ A visual status line script for [Claude Code](https://docs.anthropic.com/en/docs
 
   Greyed out if the source cache hasn't refreshed in 30+ minutes. Data source: the Raycast "Claude Usage" extension cache. The script auto-discovers the cache file once and stores its path in `~/.claude/state/seven-day-usage-cache-path`. The chunk is hidden when that data is unavailable.
 
+## Codex Usage Tracker
+
+`codex-usage.sh` is a companion tracker for Codex Desktop/CLI. It reads Codex's local session JSONL logs under `~/.codex/sessions` and renders the latest session's:
+
+- **Context window percentage** from the latest turn usage against `token_count.info.model_context_window`
+- **5-hour and 7-day quota usage** from Codex `rate_limits`, falling back to the newest recent quota snapshot if the active session has null quota fields
+- **Session and last-turn token usage** split into input, cached input, output, and reasoning tokens
+- **Model, effort, message count, plan type, and workspace**
+
+Preview:
+
+```text
+◔ 28% ctx | gpt-5.5 | high | 5h 12% reset 2h14m | 7d 41% reset 5d03h · +4% spare
+Σ 72.2k tok | last 24.4k | in 70.8k cached 49.3k out 1.5k think 388 | msgs 5 | pro | TaluxIQ
+```
+
+Run it directly:
+
+```bash
+chmod +x codex-usage.sh
+./codex-usage.sh
+```
+
+Inspect a specific Codex session:
+
+```bash
+./codex-usage.sh --file ~/.codex/sessions/2026/05/13/rollout-example.jsonl
+```
+
+For a plain, no-colour output suitable for scripts:
+
+```bash
+NO_COLOR=1 ./codex-usage.sh
+```
+
+This is usage tracking, not invoice-grade billing. Codex session logs expose quota percentages and token counts, but not a stable per-turn dollar cost. If Codex later exposes official cost fields or a status-line hook, this script can adopt those without changing the display shape.
+
 ## Installation
 
 ### Prerequisites
@@ -31,6 +68,7 @@ A visual status line script for [Claude Code](https://docs.anthropic.com/en/docs
 - `jq` for JSON parsing
 - `bc` for cost calculation
 - `git` (optional, for git status features)
+- `python3` for relative reset-time formatting in the Codex usage tracker
 
 ### Setup
 
