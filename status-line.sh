@@ -432,10 +432,10 @@ diff = util - progress  # negative = under pace, positive = over pace
 if est >= 100 and progress > 5:
     fg = '38;5;196'
     label = '\U0001f6d1 over pace'
-elif diff < -7:
+elif diff < -1:
     fg = '38;5;34'
     label = f'+{int(round(-diff))}% spare'
-elif diff > 7:
+elif diff > 1:
     fg = '38;5;208'
     label = f'-{int(round(diff))}% over'
 else:
@@ -445,7 +445,25 @@ else:
 if stale:
     fg = '38;5;245'
 
-print(f'\x1b[{fg}m{label}\x1b[0m', end='')
+cells = 10
+filled = int(round(util / 100.0 * cells))
+filled = max(0, min(cells, filled))
+pace_mark = int(round(progress / 100.0 * cells))
+pace_mark = max(0, min(cells - 1, pace_mark))
+
+pace_ansi = '\x1b[38;5;196m│'  # red pace marker for contrast
+bar_chars = []
+for i in range(cells):
+    if i < filled:
+        bar_chars.append('▓')  # ▓ used
+    elif i == pace_mark:
+        bar_chars.append(f'{pace_ansi}\x1b[{fg}m')
+    else:
+        bar_chars.append('░')  # ░ unused
+bar = ''.join(bar_chars)
+
+used_pct = int(round(util))
+print(f'\x1b[{fg}m{bar} {used_pct}% · {label}\x1b[0m', end='')
 PYEOF
 )
     fi
