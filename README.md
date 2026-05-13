@@ -55,6 +55,18 @@ NO_COLOR=1 ./codex-usage.sh
 
 For debugging, `./codex-usage.sh --full` also shows context percentage, 5-hour quota, token usage, model, effort, messages, plan type, and workspace.
 
+Watch mode refreshes once per minute:
+
+```bash
+./codex-usage.sh --live
+```
+
+If installed as a Fish function, use:
+
+```fish
+codex-usage --live
+```
+
 This is usage tracking, not invoice-grade billing. Codex session logs expose quota percentages and token counts, but not a stable per-turn dollar cost. If Codex later exposes official cost fields or a status-line hook, this script can adopt those without changing the display shape.
 
 ## Installation

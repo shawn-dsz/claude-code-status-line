@@ -15,27 +15,37 @@ colour() {
 
 usage() {
     cat <<'EOF'
-Usage: codex-usage.sh [--file SESSION.jsonl] [--latest] [--full]
+Usage: codex-usage.sh [--file SESSION.jsonl] [--latest] [--full] [--live]
 
 Shows current Codex usage from Codex session JSONL:
   - default: 7-day quota pace only, e.g. "7d 4% reset 5d12h · +17% spare"
   - --full: model, effort, 5-hour quota, tokens, messages, and workspace
+  - --live, --watch: refresh every minute until interrupted
 EOF
 }
 
 session_file=''
 full_output='0'
+live_output='0'
+render_args=()
 while [ "$#" -gt 0 ]; do
     case "$1" in
         --file)
+            render_args+=("$1")
             shift
             session_file="${1:-}"
+            render_args+=("$session_file")
             ;;
         --latest)
             session_file=''
+            render_args+=("$1")
             ;;
         --full)
             full_output='1'
+            render_args+=("$1")
+            ;;
+        --live|--watch)
+            live_output='1'
             ;;
         -h|--help)
             usage
@@ -49,6 +59,16 @@ while [ "$#" -gt 0 ]; do
     esac
     shift
 done
+
+if [ "$live_output" = "1" ]; then
+    interval="${CODEX_USAGE_LIVE_INTERVAL_SECONDS:-60}"
+    while true; do
+        clear
+        bash "$0" ${render_args[@]+"${render_args[@]}"}
+        printf "\nrefreshes every %ss; press Ctrl-C to stop\n" "$interval"
+        sleep "$interval"
+    done
+fi
 
 if [ -z "$session_file" ]; then
     session_file=$(find "$HOME/.codex/sessions" -type f -name 'rollout-*.jsonl' -print0 2>/dev/null |
