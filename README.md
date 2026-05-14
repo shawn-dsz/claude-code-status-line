@@ -99,6 +99,37 @@ claude-usage
 claude-usage --live
 ```
 
+## Combined AI Usage
+
+`ai-usage.sh` combines the Codex and Claude bars in one command.
+
+Preview:
+
+```text
+codex  ▓▓░│░░░░░░ 24% · +7% spare
+claude ▓▓▓░│░░░░░ 28% · +14% spare
+```
+
+Run it directly:
+
+```bash
+chmod +x ai-usage.sh
+./ai-usage.sh
+```
+
+Watch mode refreshes once per minute:
+
+```bash
+./ai-usage.sh --live
+```
+
+If installed as a Fish function, use:
+
+```fish
+ai-usage
+ai-usage --live
+```
+
 ## Installation
 
 ### Prerequisites
