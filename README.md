@@ -69,6 +69,36 @@ codex-usage --live
 
 This is usage tracking, not invoice-grade billing. Codex session logs expose quota percentages and token counts, but not a stable per-turn dollar cost. If Codex later exposes official cost fields or a status-line hook, this script can adopt those without changing the display shape.
 
+## Claude Usage Tracker
+
+`claude-usage.sh` renders the same 7-day Claude Max quota pace chunk that the status line shows, sourced from the Raycast Claude Usage extension cache.
+
+Preview:
+
+```text
+7d 42% reset 5d12h · +3% spare
+```
+
+Run it directly:
+
+```bash
+chmod +x claude-usage.sh
+./claude-usage.sh
+```
+
+Watch mode refreshes once per minute:
+
+```bash
+./claude-usage.sh --live
+```
+
+If installed as a Fish function, use:
+
+```fish
+claude-usage
+claude-usage --live
+```
+
 ## Installation
 
 ### Prerequisites
