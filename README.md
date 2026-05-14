@@ -31,7 +31,7 @@ A visual status line script for [Claude Code](https://docs.anthropic.com/en/docs
 Preview:
 
 ```text
-7d 4% reset 5d12h · +17% spare
+▓▓▓░│░░░░░ 28% · +14% spare
 ```
 
 Run it directly:
@@ -71,12 +71,12 @@ This is usage tracking, not invoice-grade billing. Codex session logs expose quo
 
 ## Claude Usage Tracker
 
-`claude-usage.sh` renders the same 7-day Claude Max quota pace chunk that the status line shows, sourced from the Raycast Claude Usage extension cache.
+`claude-usage.sh` renders the same 7-day Claude Max quota pace signal as a compact bar, sourced from the Raycast Claude Usage extension cache.
 
 Preview:
 
 ```text
-7d 42% reset 5d12h · +3% spare
+▓▓▓░│░░░░░ 28% · +14% spare
 ```
 
 Run it directly:

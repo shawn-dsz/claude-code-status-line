@@ -18,7 +18,8 @@ EOF
 
 output=$(NO_COLOR=1 bash ./codex-usage.sh --file "$fixture")
 
-grep -q '7d 4%' <<<"$output"
+grep -q '│' <<<"$output"
+grep -q '4% · +17% spare' <<<"$output"
 grep -q '+17% spare' <<<"$output"
 
 full_output=$(NO_COLOR=1 bash ./codex-usage.sh --full --file "$fixture")
@@ -26,8 +27,8 @@ full_output=$(NO_COLOR=1 bash ./codex-usage.sh --full --file "$fixture")
 grep -q '11% ctx' <<<"$full_output"
 grep -q 'gpt-5.5' <<<"$full_output"
 grep -q 'high' <<<"$full_output"
-grep -q '5h 42%' <<<"$full_output"
-grep -q '7d 4%' <<<"$full_output"
+grep -q '▓▓▓▓░░░░░░ 42%' <<<"$full_output"
+grep -q '4% · +17% spare' <<<"$full_output"
 grep -q 'Σ 23.0k tok' <<<"$full_output"
 grep -q 'last 11.0k' <<<"$full_output"
 grep -q 'in 20.0k cached 5.0k out 3.0k think 1.0k' <<<"$full_output"
@@ -36,11 +37,11 @@ grep -q 'msgs 1 | pro | codex-project' <<<"$full_output"
 live_output="$tmp_dir/live-output.txt"
 TERM=xterm NO_COLOR=1 CODEX_USAGE_LIVE_INTERVAL_SECONDS=1 bash ./codex-usage.sh --live --file "$fixture" >"$live_output" &
 live_pid=$!
-sleep 0.3
+sleep 1.2
 kill "$live_pid" 2>/dev/null || true
 wait "$live_pid" 2>/dev/null || true
 
-grep -q '7d 4%' "$live_output"
+grep -q '4% · +17% spare' "$live_output"
 grep -q 'refreshes every 1s' "$live_output"
 
 printf "codex-usage fixture test passed\n"

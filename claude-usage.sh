@@ -18,7 +18,7 @@ usage() {
 Usage: claude-usage.sh [--file CACHE.json] [--live]
 
 Shows Claude 7-day usage from the Raycast Claude Usage extension cache:
-  - default: 7-day quota pace only, e.g. "7d 42% reset 5d12h · +3% spare"
+  - default: 7-day quota pace only, e.g. "▓▓▓░│░░░░░ 28% · +14% spare"
   - --live, --watch: refresh every minute until interrupted
 EOF
 }
@@ -136,15 +136,19 @@ else:
 if stale:
     fg = "38;5;245"
 
-days = int(hours_left // 24)
-hours = int(hours_left % 24)
-if days:
-    reset_text = f"{days}d{hours:02d}h"
-else:
-    minutes = int((hours_left % 1) * 60)
-    reset_text = f"{hours}h{minutes:02d}m"
+cells = 10
+filled = max(0, min(cells, int(round(util / 100 * cells))))
+pace_mark = max(0, min(cells - 1, int(round(progress / 100 * cells))))
+bar = []
+for i in range(cells):
+    if i < filled:
+        bar.append("▓")
+    elif i == pace_mark:
+        bar.append("│")
+    else:
+        bar.append("░")
 
-chunk = f"7d {int(round(util))}% reset {reset_text} · {label}"
+chunk = f"{''.join(bar)} {int(round(util))}% · {label}"
 if os.environ.get("NO_COLOR"):
     print(chunk, end="")
 else:

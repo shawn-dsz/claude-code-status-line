@@ -18,7 +18,7 @@ usage() {
 Usage: codex-usage.sh [--file SESSION.jsonl] [--latest] [--full] [--live]
 
 Shows current Codex usage from Codex session JSONL:
-  - default: 7-day quota pace only, e.g. "7d 4% reset 5d12h · +17% spare"
+  - default: 7-day quota pace only, e.g. "▓▓▓░│░░░░░ 28% · +14% spare"
   - --full: model, effort, 5-hour quota, tokens, messages, and workspace
   - --live, --watch: refresh every minute until interrupted
 EOF
@@ -171,9 +171,8 @@ quota_chunk() {
     local window_minutes="$4"
     [ -n "$pct" ] || return 0
 
-    local rounded reset_text colour_code marker suffix
+    local rounded colour_code rendered
     rounded=$(fmt_pct "$pct")
-    reset_text=$(fmt_reset "$reset_epoch")
 
     if [ "$rounded" -lt 50 ]; then
         colour_code='38;5;34'
@@ -185,10 +184,8 @@ quota_chunk() {
         colour_code='38;5;196'
     fi
 
-    marker=''
-    suffix=''
     if [ "$window_minutes" = "10080" ] && [ -n "$reset_epoch" ]; then
-        marker=$(python3 - "$pct" "$reset_epoch" <<'PYEOF' 2>/dev/null || true
+        rendered=$(python3 - "$pct" "$reset_epoch" <<'PYEOF' 2>/dev/null || true
 import sys, time
 used = float(sys.argv[1])
 reset = int(float(sys.argv[2]))
@@ -197,21 +194,41 @@ elapsed = max(0, min(window, window - max(0, reset - int(time.time()))))
 pace = elapsed / window * 100 if window else 0
 diff = used - pace
 projected = used / pace * 100 if pace > 1 else used
+cells = 10
+filled = max(0, min(cells, int(round(used / 100 * cells))))
+pace_mark = max(0, min(cells - 1, int(round(pace / 100 * cells))))
+bar = []
+for i in range(cells):
+    if i < filled:
+        bar.append("▓")
+    elif i == pace_mark:
+        bar.append("│")
+    else:
+        bar.append("░")
 if projected >= 100 and pace > 5:
-    print("over pace")
+    label = "over pace"
 elif diff < -1:
-    print(f"+{round(-diff):.0f}% spare")
+    label = f"+{round(-diff):.0f}% spare"
 elif diff > 1:
-    print(f"-{round(diff):.0f}% over")
+    label = f"-{round(diff):.0f}% over"
 else:
-    print("on track")
+    label = "on track"
+print(f"{''.join(bar)} {int(round(used))}% · {label}")
+PYEOF
+)
+    else
+        rendered=$(python3 - "$pct" <<'PYEOF' 2>/dev/null || true
+import sys
+used = float(sys.argv[1])
+cells = 10
+filled = max(0, min(cells, int(round(used / 100 * cells))))
+bar = "▓" * filled + "░" * (cells - filled)
+print(f"{bar} {int(round(used))}%")
 PYEOF
 )
     fi
 
-    [ -n "$reset_text" ] && suffix=" reset ${reset_text}"
-    [ -n "$marker" ] && suffix="${suffix} · ${marker}"
-    colour "$colour_code" "${label} ${rounded}%${suffix}"
+    colour "$colour_code" "$rendered"
 }
 
 model=$(jq_context '.model')

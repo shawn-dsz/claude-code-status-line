@@ -15,18 +15,18 @@ printf '{"seven_day":{"utilization":4.2,"resets_at":"%s"}}\n' "$reset" >"$fixtur
 
 output=$(NO_COLOR=1 bash ./claude-usage.sh --file "$fixture")
 
-grep -q '7d 4%' <<<"$output"
-grep -q 'reset 5d' <<<"$output"
+grep -q '│' <<<"$output"
+grep -q '4% · +17% spare' <<<"$output"
 grep -q '+17% spare' <<<"$output"
 
 live_output="$tmp_dir/live-output.txt"
 TERM=xterm NO_COLOR=1 CLAUDE_USAGE_LIVE_INTERVAL_SECONDS=1 bash ./claude-usage.sh --live --file "$fixture" >"$live_output" &
 live_pid=$!
-sleep 0.3
+sleep 1.2
 kill "$live_pid" 2>/dev/null || true
 wait "$live_pid" 2>/dev/null || true
 
-grep -q '7d 4%' "$live_output"
+grep -q '4% · +17% spare' "$live_output"
 grep -q 'refreshes every 1s' "$live_output"
 
 printf "claude-usage fixture test passed\n"
