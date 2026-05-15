@@ -237,11 +237,16 @@ if [ -n "$git_branch" ] || [ -n "$project_dir" ]; then
     fi
 fi
 
-# Line 1: context gauge | model | effort | week quota status
+# Line 1: agent | context gauge | model | effort | week pace label
 line1=''
 
+if [ -n "$agent_display" ]; then
+    line1="${agent_display}"
+fi
+
 if [ -n "$ctx_gauge" ]; then
-    line1="${ctx_gauge}"
+    [ -n "$line1" ] && line1="${line1} | "
+    line1="${line1}${ctx_gauge}"
 fi
 
 [ -n "$line1" ] && line1="${line1} | "
@@ -445,25 +450,7 @@ else:
 if stale:
     fg = '38;5;245'
 
-cells = 10
-filled = int(round(util / 100.0 * cells))
-filled = max(0, min(cells, filled))
-pace_mark = int(round(progress / 100.0 * cells))
-pace_mark = max(0, min(cells - 1, pace_mark))
-
-pace_ansi = '\x1b[38;5;196m│'  # red pace marker for contrast
-bar_chars = []
-for i in range(cells):
-    if i < filled:
-        bar_chars.append('▓')  # ▓ used
-    elif i == pace_mark:
-        bar_chars.append(f'{pace_ansi}\x1b[{fg}m')
-    else:
-        bar_chars.append('░')  # ░ unused
-bar = ''.join(bar_chars)
-
-used_pct = int(round(util))
-print(f'\x1b[{fg}m{bar} {used_pct}% · {label}\x1b[0m', end='')
+print(f'\x1b[{fg}m{label}\x1b[0m', end='')
 PYEOF
 )
     fi
