@@ -70,6 +70,16 @@ if [ "$live_output" = "1" ]; then
     done
 fi
 
+if ! command -v jq >/dev/null 2>&1; then
+    printf "jq is required to parse Codex session JSONL\n" >&2
+    exit 1
+fi
+
+user_supplied_file='0'
+if [ -n "$session_file" ]; then
+    user_supplied_file='1'
+fi
+
 if [ -z "$session_file" ]; then
     session_file=$(find "$HOME/.codex/sessions" -type f -name 'rollout-*.jsonl' -print0 2>/dev/null |
         xargs -0 ls -t 2>/dev/null |
@@ -81,12 +91,21 @@ if [ -z "$session_file" ] || [ ! -f "$session_file" ]; then
     exit 1
 fi
 
-if ! command -v jq >/dev/null 2>&1; then
-    printf "jq is required to parse Codex session JSONL\n" >&2
-    exit 1
-fi
-
 last_token_payload=$(jq -c 'select(.type == "event_msg" and .payload.type == "token_count") | .payload' "$session_file" | tail -n1)
+if [ -z "$last_token_payload" ] && [ "$user_supplied_file" = "0" ]; then
+    while IFS= read -r candidate; do
+        [ -n "$candidate" ] || continue
+        candidate_payload=$(jq -c 'select(.type == "event_msg" and .payload.type == "token_count") | .payload' "$candidate" 2>/dev/null | tail -n1)
+        if [ -n "$candidate_payload" ]; then
+            session_file="$candidate"
+            last_token_payload="$candidate_payload"
+            break
+        fi
+    done < <(find "$HOME/.codex/sessions" -type f -name 'rollout-*.jsonl' -exec stat -f '%m %N' {} + 2>/dev/null |
+        sort -rn |
+        head -25 |
+        cut -d' ' -f2-)
+fi
 if [ -z "$last_token_payload" ]; then
     printf "No token_count events found in %s\n" "$session_file" >&2
     exit 1
