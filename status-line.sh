@@ -12,7 +12,16 @@ transcript_path=$(echo "$input" | jq -r '.transcript_path // empty')
 session_id=$(echo "$input" | jq -r '.session_id // empty')
 agent_display=''
 instance_display=''
-identity_file="$HOME/.claude/state/current-session-identity.json"
+account_display=''
+# Per-account state dir: respects CLAUDE_CONFIG_DIR so personal vs alt accounts
+# read their own identity and cache pins.
+claude_config_dir="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
+case "$claude_config_dir" in
+    "$HOME/.claude") account_label='personal' ;;
+    "$HOME/.claude-alt") account_label='fho' ;;
+    *) account_label=$(basename "$claude_config_dir") ;;
+esac
+identity_file="$claude_config_dir/state/current-session-identity.json"
 agent_colour=''
 agent_emoji='◆'
 agent_name=''
@@ -33,15 +42,52 @@ case "$agent_colour" in
     cyan)   agent_ansi='\033[1;38;5;51m'  ;;
     *)      agent_ansi='\033[1m'          ;;
 esac
-# Agent name for line 1
-if [ -n "$agent_name" ]; then
-    agent_display=$(printf "${agent_ansi}%s %s\033[0m" "$agent_emoji" "$agent_name")
+# Peer ID from claude-peers MCP (matches what `list_peers` reports). Falls back
+# to session_id[:8] when the peer broker isn't running or no peer is registered.
+peer_id=''
+peers_db="${CLAUDE_PEERS_DB:-$HOME/.claude-peers.db}"
+if [ -f "$peers_db" ] && command -v sqlite3 >/dev/null 2>&1; then
+    # Walk up the process tree to find the claude CLI ancestor.
+    claude_pid=''
+    walk_pid=$$
+    for _ in 1 2 3 4 5 6; do
+        [ -z "$walk_pid" ] || [ "$walk_pid" = "1" ] && break
+        read wp wppid wcmd < <(ps -o pid=,ppid=,comm= -p "$walk_pid" 2>/dev/null)
+        [ -z "$wp" ] && break
+        case "$wcmd" in
+            *claude) claude_pid="$wp"; break ;;
+        esac
+        walk_pid="$wppid"
+    done
+    if [ -n "$claude_pid" ]; then
+        # Find children of the claude PID and look up their peer IDs.
+        child_pids=$(ps -A -o pid=,ppid= | awk -v cp="$claude_pid" '$2==cp{print $1}')
+        for cpid in $child_pids; do
+            candidate=$(sqlite3 "$peers_db" "SELECT id FROM peers WHERE pid=$cpid LIMIT 1;" 2>/dev/null)
+            if [ -n "$candidate" ]; then
+                peer_id="$candidate"
+                break
+            fi
+        done
+    fi
 fi
-# Short instance ID for line 2
-if [ -n "$session_id" ]; then
+if [ -n "$peer_id" ]; then
+    short_id="$peer_id"
+elif [ -n "$session_id" ]; then
     short_id="${session_id:0:8}"
+else
+    short_id=''
+fi
+if [ -n "$short_id" ]; then
+    agent_display=$(printf "${agent_ansi}%s %s\033[0m" "$agent_emoji" "$short_id")
     instance_display=$(printf "${agent_ansi}%s\033[0m" "$short_id")
 fi
+case "$account_label" in
+    personal) account_ansi='\033[38;5;39m'  ;;  # blue
+    fho)      account_ansi='\033[38;5;208m' ;;  # orange
+    *)        account_ansi='\033[38;5;245m' ;;  # grey
+esac
+account_display=$(printf "${account_ansi}⎇ %s\033[0m" "$account_label")
 
 # Reasoning effort (may appear at top level or nested; default based on model)
 reasoning_effort=$(echo "$input" | jq -r '.effort.level // .reasoning_effort // .model.reasoning_effort // .output_style.reasoning_effort // empty')
@@ -69,8 +115,10 @@ esac
 used_pct=$(echo "$input" | jq -r '.context_window.used_percentage // empty')
 window_size=$(echo "$input" | jq -r '.context_window.context_window_size // empty')
 
-# Derive canonical window size from model name; correct stale values from Claude Code
+# Derive canonical window size from model name; correct stale values from Claude Code.
+# Sonnet/Haiku in 1M-context mode (e.g. claude-sonnet-4-6[1m]) get the 1M window.
 model_lower=$(echo "$model" | tr '[:upper:]' '[:lower:]')
+model_id=$(echo "$input" | jq -r '.model.id // empty' | tr '[:upper:]' '[:lower:]')
 case "$model_lower" in
     *opus*)    canonical_window=1000000 ;;
     *sonnet*)  canonical_window=200000  ;;
@@ -78,9 +126,17 @@ case "$model_lower" in
     *gemini*)  canonical_window=2000000 ;;
     *)         canonical_window=""      ;;
 esac
-# Use canonical size unconditionally when known -- ensures model switches are reflected immediately
+case "$model_id$model_lower" in
+    *'[1m]'*|*1m*) canonical_window=1000000 ;;
+esac
+# Use canonical size unconditionally when known -- ensures model switches are reflected immediately.
+# But if Claude Code reports a larger window than canonical, trust the reported value.
 if [ -n "$canonical_window" ]; then
-    window_size=$canonical_window
+    if [ -n "$window_size" ] && [ "$window_size" -gt "$canonical_window" ] 2>/dev/null; then
+        :
+    else
+        window_size=$canonical_window
+    fi
 fi
 
 # Calculate total tokens used in context (sum of all current_usage token fields)
@@ -96,6 +152,10 @@ input_tokens=$(echo "$input" | jq -r '
 # Recalculate percentage using the authoritative window size
 if [ -n "$window_size" ] && [ -n "$input_tokens" ] && [ "$input_tokens" != "0" ]; then
     used_pct=$(( (input_tokens * 100) / window_size ))
+fi
+# Clamp to 100 -- protects against stale window_size after a mid-session model change
+if [ -n "$used_pct" ] && [ "$used_pct" -gt 100 ] 2>/dev/null; then
+    used_pct=100
 fi
 
 ctx_gauge=''
@@ -244,6 +304,11 @@ if [ -n "$agent_display" ]; then
     line1="${agent_display}"
 fi
 
+if [ -n "$account_display" ]; then
+    [ -n "$line1" ] && line1="${line1} | "
+    line1="${line1}${account_display}"
+fi
+
 if [ -n "$ctx_gauge" ]; then
     [ -n "$line1" ] && line1="${line1} | "
     line1="${line1}${ctx_gauge}"
@@ -386,7 +451,7 @@ fi
 # Resolves the cache file path once and stores it in ~/.claude/state/seven-day-usage-cache-path
 # so we don't scan the cache directory on every render.
 week_display=''
-week_path_cache="$HOME/.claude/state/seven-day-usage-cache-path"
+week_path_cache="$claude_config_dir/state/seven-day-usage-cache-path"
 week_data_file=''
 if [ -f "$week_path_cache" ]; then
     candidate=$(cat "$week_path_cache" 2>/dev/null)
@@ -436,13 +501,13 @@ diff = util - progress  # negative = under pace, positive = over pace
 
 if est >= 100 and progress > 5:
     fg = '38;5;196'
-    label = '\U0001f6d1 over pace'
+    label = f'\U0001f6d1 {int(round(diff))}% over pace'
 elif diff < -1:
     fg = '38;5;34'
     label = f'+{int(round(-diff))}% spare'
 elif diff > 1:
     fg = '38;5;208'
-    label = f'-{int(round(diff))}% over'
+    label = f'{int(round(diff))}% over'
 else:
     fg = '38;5;220'
     label = 'on track'

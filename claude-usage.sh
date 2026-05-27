@@ -65,7 +65,7 @@ if ! command -v jq >/dev/null 2>&1; then
     exit 1
 fi
 
-path_cache="$HOME/.claude/state/seven-day-usage-cache-path"
+path_cache="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/state/seven-day-usage-cache-path"
 if [ -z "$cache_file" ] && [ -f "$path_cache" ]; then
     candidate=$(cat "$path_cache" 2>/dev/null)
     if [ -n "$candidate" ] && [ -f "$candidate" ] && head -c 80 "$candidate" 2>/dev/null | grep -q 'seven_day'; then
@@ -122,13 +122,13 @@ diff = util - progress
 
 if projected >= 100 and progress > 5:
     fg = "38;5;196"
-    label = "over pace"
+    label = f"{int(round(diff))}% over pace"
 elif diff < -1:
     fg = "38;5;34"
     label = f"+{int(round(-diff))}% spare"
 elif diff > 1:
     fg = "38;5;208"
-    label = f"-{int(round(diff))}% over"
+    label = f"{int(round(diff))}% over"
 else:
     fg = "38;5;220"
     label = "on track"
