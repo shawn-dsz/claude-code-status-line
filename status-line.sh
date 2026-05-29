@@ -297,6 +297,19 @@ if [ -n "$git_branch" ] || [ -n "$project_dir" ]; then
     fi
 fi
 
+# Peak-hour dispatch-only guard: 21:00-22:00 local is reserved focus time and
+# should be spent batching tasks to the queue, not grinding manual turns. Show a
+# quiet reminder during that window only.
+dispatch_guard=''
+if command -v python3 >/dev/null 2>&1; then
+    dispatch_guard=$(python3 -c "
+from datetime import datetime
+h = datetime.now().astimezone().hour
+if h == 21:
+    print('\x1b[38;5;141m🌙 21:00 dispatch-only\x1b[0m', end='')
+" 2>/dev/null)
+fi
+
 # Line 1: agent | context gauge | model | effort | week pace label
 line1=''
 
@@ -402,8 +415,27 @@ print(count)
 " 2>/dev/null)
 fi
 if [[ "$msg_count" =~ ^[0-9]+$ ]] && [ "$msg_count" -gt 0 ]; then
+    # Staged thread-health hints on a single counter. Long threads cost a fixed
+    # per-message context tax and lose their own plot once they run too long, so
+    # the nudge escalates with turn count:
+    #   ~150  yellow  - getting long, plan a handoff point
+    #   ~300  orange  - handoff to a file and reopen fresh (the plot-loss line)
+    #   ~2000 red     - hard stop: compact or start a new chat
+    if [ "$msg_count" -lt 150 ]; then
+        msg_colour='\033[38;5;245m'   # grey - plenty of headroom
+        msg_hint=''
+    elif [ "$msg_count" -lt 300 ]; then
+        msg_colour='\033[38;5;220m'   # yellow - getting long
+        msg_hint=' ⚠ plan handoff'
+    elif [ "$msg_count" -lt 2000 ]; then
+        msg_colour='\033[38;5;208m'   # orange - handoff and reopen fresh
+        msg_hint=' 👝 handoff + fresh chat'
+    else
+        msg_colour='\033[38;5;196m'   # red - hard stop
+        msg_hint=' 🛑 compact or new chat'
+    fi
     [ -n "$line2" ] && line2="${line2} | "
-    line2=$(printf "%s\033[38;5;245m💬%s\033[0m" "$line2" "$msg_count")
+    line2=$(printf "%s${msg_colour}💬%s${msg_hint}\033[0m" "$line2" "$msg_count")
 fi
 
 # Last response time: find most recent assistant message timestamp and show local time
@@ -523,6 +555,10 @@ fi
 
 if [ -n "$week_render" ]; then
     line1="${line1} | ${week_render}"
+fi
+
+if [ -n "$dispatch_guard" ]; then
+    line1="${line1} | ${dispatch_guard}"
 fi
 
 if [ -n "$git_branch" ]; then
