@@ -1,6 +1,6 @@
 #!/bin/bash
 # Status line script for Claude Code
-# Displays: context_health | duration | model | output_style | effort | project_dir | git_branch | git_status | files | lines
+# Displays: context_health | duration | model | output_style | effort | project_dir | git_status | files
 
 input=$(cat)
 model=$(echo "$input" | jq -r '.model.display_name')
@@ -214,7 +214,6 @@ fi
 git_branch=''
 git_status=''
 files_changed=''
-lines_changed=''
 ahead_count='0'
 
 if git -C "$project_dir" rev-parse --git-dir > /dev/null 2>&1; then
@@ -229,12 +228,8 @@ if git -C "$project_dir" rev-parse --git-dir > /dev/null 2>&1; then
         files_changed=$(echo "$git_output" | wc -l | tr -d ' ')
     fi
 
-    diff_stat=$(git -C "$project_dir" --no-optional-locks diff --numstat 2>/dev/null | awk '{added+=$1; deleted+=$2} END {print "+"added"/-"deleted}')
-    if [ -z "$diff_stat" ] || [ "$diff_stat" = '+/-' ]; then
-        lines_changed='+0/-0'
-    else
-        lines_changed="$diff_stat"
-    fi
+    # Line-count diff segment (+N/-M) disabled by request. Skipping the
+    # numstat call avoids an extra git diff scan on every status render.
 
     # Commits ahead of upstream (unpushed)
     upstream=$(git -C "$project_dir" rev-parse --abbrev-ref --symbolic-full-name @{u} 2>/dev/null)
@@ -321,7 +316,7 @@ if [ -n "$effort_display" ]; then
     line1=$(printf "%s | %s" "$line1" "$effort_display")
 fi
 
-# Line 2: linear ticket | unpushed commits | files +/- | duration | cost | message count | last response | branch
+# Line 2: linear ticket | unpushed commits | files | duration | cost | message count | last response
 line2=''
 
 if [ -n "$linear_display" ]; then
@@ -368,7 +363,7 @@ if [ -n "$files_changed" ]; then
             file_colour='\033[38;5;160m'   # dark red - critical
             dirty_hint=' 🛑 commit now'
         fi
-        line2=$(printf "%s${file_colour}%s files\033[0m \033[36m%s\033[0m${file_colour}${dirty_hint}\033[0m" "$line2" "$files_changed" "$lines_changed")
+        line2=$(printf "%s${file_colour}%s files${dirty_hint}\033[0m" "$line2" "$files_changed")
     fi
 fi
 
@@ -570,11 +565,6 @@ fi
 
 if [ -n "$week_render" ]; then
     line1="${line1} | ${week_render}"
-fi
-
-if [ -n "$git_branch" ]; then
-    [ -n "$line2" ] && line2="${line2} | "
-    line2=$(printf "%s\033[38;5;245m%s\033[0m" "$line2" "$git_branch")
 fi
 
 printf "%s\n%s\n" "$line1" "$line2"
