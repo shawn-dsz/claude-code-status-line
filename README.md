@@ -17,6 +17,10 @@ A visual status line script for [Claude Code](https://docs.anthropic.com/en/docs
   - `150+` (yellow) `⚠ plan handoff` — getting long, pick a handoff point.
   - `300+` (orange) `👝 handoff + fresh chat` — reopen in a fresh session before it loses the plot.
   - `2000+` (red) `🛑 compact or new chat` — hard stop; the per-message context tax is now pure waste.
+- **Delegation meter** (`🤖N`) — counts subagent dispatches (`Agent`/`Task` tool uses) in the session. The main session is meant to orchestrate, not hand-drive; the costliest sessions are long threads with zero delegation. Behaviour:
+  - any dispatches → grey `🤖N`, no nag.
+  - long thread (40+ turns) with **zero** dispatches → red `🤖0 🛑 delegate`, flagging that the orchestrator-only pattern is being ignored.
+  - short thread with zero dispatches → hidden (normal early conversation).
 - **Session cost** in AUD (configurable exchange rate)
 - **Session duration** with adaptive formatting (`45s`, `12m34s`, `1h02m`)
 - **Reasoning effort** indicator with colour coding: green (`⚡low`), yellow (`⚙ med`), magenta (`🧠high`)

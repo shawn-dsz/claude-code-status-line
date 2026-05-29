@@ -377,13 +377,16 @@ if [ -n "$duration_display" ]; then
     line2="${line2}${duration_display}"
 fi
 
-# Message count: count actual human prompts (string content, non-sidechain, external)
-# from the session transcript provided by Claude Code
+# Message + delegation counts in one transcript pass:
+#   msg_count      = genuine human prompts (string content, non-sidechain, external)
+#   dispatch_count = Agent/Task subagent dispatches (orchestrator-only-rule signal)
 msg_count=''
+dispatch_count=''
 if [ -n "$transcript_path" ] && [ -f "$transcript_path" ] && command -v python3 >/dev/null 2>&1; then
-    msg_count=$(python3 -c "
+    read -r msg_count dispatch_count < <(python3 -c "
 import json, sys
-count = 0
+msgs = 0
+dispatches = 0
 try:
     with open('$transcript_path') as f:
         for line in f:
@@ -393,12 +396,18 @@ try:
                     obj.get('userType') == 'external' and
                     not obj.get('isSidechain', False) and
                     isinstance(obj.get('message', {}).get('content', ''), str)):
-                    count += 1
+                    msgs += 1
+                content = obj.get('message', {}).get('content')
+                if isinstance(content, list):
+                    for b in content:
+                        if (isinstance(b, dict) and b.get('type') == 'tool_use'
+                                and b.get('name') in ('Agent', 'Task')):
+                            dispatches += 1
             except Exception:
                 pass
 except Exception:
     pass
-print(count)
+print(msgs, dispatches)
 " 2>/dev/null)
 fi
 if [[ "$msg_count" =~ ^[0-9]+$ ]] && [ "$msg_count" -gt 0 ]; then
@@ -423,6 +432,25 @@ if [[ "$msg_count" =~ ^[0-9]+$ ]] && [ "$msg_count" -gt 0 ]; then
     fi
     [ -n "$line2" ] && line2="${line2} | "
     line2=$(printf "%s${msg_colour}💬%s${msg_hint}\033[0m" "$line2" "$msg_count")
+fi
+
+# Delegation meter: the main session is meant to orchestrate, not hand-drive.
+# The costliest sessions were long threads with zero subagent dispatches, so
+# warn when a thread has run long with no delegation.
+#   long thread + 0 dispatches -> red '🛑 delegate' (orchestrator-only ignored)
+#   short thread + 0 dispatches -> hidden (normal early conversation)
+#   any dispatches              -> grey count, no nag
+if [[ "$dispatch_count" =~ ^[0-9]+$ ]]; then
+    deleg_long_turns=40   # threshold for "this thread is long enough to expect delegation"
+    if [ "$dispatch_count" -eq 0 ]; then
+        if [[ "$msg_count" =~ ^[0-9]+$ ]] && [ "$msg_count" -ge "$deleg_long_turns" ]; then
+            [ -n "$line2" ] && line2="${line2} | "
+            line2=$(printf "%s\033[38;5;196m🤖0 🛑 delegate\033[0m" "$line2")
+        fi
+    else
+        [ -n "$line2" ] && line2="${line2} | "
+        line2=$(printf "%s\033[38;5;245m🤖%s\033[0m" "$line2" "$dispatch_count")
+    fi
 fi
 
 # Last response time: find most recent assistant message timestamp and show local time
