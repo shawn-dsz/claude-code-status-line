@@ -17,7 +17,6 @@ A visual status line script for [Claude Code](https://docs.anthropic.com/en/docs
   - `150+` (yellow) `⚠ plan handoff` — getting long, pick a handoff point.
   - `300+` (orange) `👝 handoff + fresh chat` — reopen in a fresh session before it loses the plot.
   - `2000+` (red) `🛑 compact or new chat` — hard stop; the per-message context tax is now pure waste.
-- **Peak-hour dispatch guard** — between 21:00 and 22:00 local time, shows `🌙 21:00 dispatch-only` on line 1 as a reminder to batch tasks to the queue rather than grind manual turns.
 - **Session cost** in AUD (configurable exchange rate)
 - **Session duration** with adaptive formatting (`45s`, `12m34s`, `1h02m`)
 - **Reasoning effort** indicator with colour coding: green (`⚡low`), yellow (`⚙ med`), magenta (`🧠high`)

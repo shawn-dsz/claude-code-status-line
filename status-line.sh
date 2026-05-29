@@ -297,19 +297,6 @@ if [ -n "$git_branch" ] || [ -n "$project_dir" ]; then
     fi
 fi
 
-# Peak-hour dispatch-only guard: 21:00-22:00 local is reserved focus time and
-# should be spent batching tasks to the queue, not grinding manual turns. Show a
-# quiet reminder during that window only.
-dispatch_guard=''
-if command -v python3 >/dev/null 2>&1; then
-    dispatch_guard=$(python3 -c "
-from datetime import datetime
-h = datetime.now().astimezone().hour
-if h == 21:
-    print('\x1b[38;5;141m🌙 21:00 dispatch-only\x1b[0m', end='')
-" 2>/dev/null)
-fi
-
 # Line 1: agent | context gauge | model | effort | week pace label
 line1=''
 
@@ -555,10 +542,6 @@ fi
 
 if [ -n "$week_render" ]; then
     line1="${line1} | ${week_render}"
-fi
-
-if [ -n "$dispatch_guard" ]; then
-    line1="${line1} | ${dispatch_guard}"
 fi
 
 if [ -n "$git_branch" ]; then
