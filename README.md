@@ -12,7 +12,7 @@ A visual status line script for [Claude Code](https://docs.anthropic.com/en/docs
 ## Features
 
 - **Context window gauge** with rotating dial icon (`◔ → ◑ → ●`) and percent only — colour-coded by usage zone with a `compact soon` / `compact now` hint when needed.
-- **Thread-health counter** (`💬N`) that nudges you before a thread gets expensive or loses its plot. Staged hints on the message count:
+- **Thread-health counter** (`💬N`) that nudges you before a thread gets expensive or loses its plot. Counts genuine human prompts **since the last compaction** (it resets at a compaction boundary, so an in-session `/compact` gives you a fresh count rather than a stale running total). Staged hints on the message count:
   - `< 150` (grey) — plenty of headroom.
   - `150+` (yellow) `⚠ plan handoff` — getting long, pick a handoff point.
   - `300+` (orange) `👝 handoff + fresh chat` — reopen in a fresh session before it loses the plot.

@@ -373,8 +373,16 @@ if [ -n "$duration_display" ]; then
 fi
 
 # Message + delegation counts in one transcript pass:
-#   msg_count      = genuine human prompts (string content, non-sidechain, external)
-#   dispatch_count = Agent/Task subagent dispatches (orchestrator-only-rule signal)
+#   msg_count      = genuine human prompts since the last compaction (string
+#                    content, non-sidechain, external). A Claude Code compaction
+#                    emits a `system`/`subtype==compact_boundary` line followed by
+#                    an injected `isCompactSummary` user message; we reset the
+#                    running count to 0 at the boundary so the nudge reflects
+#                    turns since context was reclaimed, not stale pre-compaction
+#                    history. Falls back to counting from start if no boundary.
+#   dispatch_count = Agent/Task subagent dispatches (orchestrator-only-rule signal),
+#                    counted across the whole session (a thread's delegation habit
+#                    is unaffected by context reclamation, so no reset here).
 msg_count=''
 dispatch_count=''
 if [ -n "$transcript_path" ] && [ -f "$transcript_path" ] && command -v python3 >/dev/null 2>&1; then
@@ -387,9 +395,19 @@ try:
         for line in f:
             try:
                 obj = json.loads(line)
+                # Compaction boundary: reset the human-prompt counter so the
+                # thread-health nudge measures turns since the last compaction.
+                if (obj.get('type') == 'system' and
+                        obj.get('subtype') == 'compact_boundary'):
+                    msgs = 0
+                    continue
                 if (obj.get('type') == 'user' and
                     obj.get('userType') == 'external' and
                     not obj.get('isSidechain', False) and
+                    # The injected post-compaction summary looks like a human
+                    # prompt but is not one -- skip it (and it sits right after
+                    # the boundary, so it would re-inflate the freshly reset count).
+                    not obj.get('isCompactSummary', False) and
                     isinstance(obj.get('message', {}).get('content', ''), str)):
                     msgs += 1
                 content = obj.get('message', {}).get('content')
@@ -406,7 +424,9 @@ print(msgs, dispatches)
 " 2>/dev/null)
 fi
 if [[ "$msg_count" =~ ^[0-9]+$ ]] && [ "$msg_count" -gt 0 ]; then
-    # Staged thread-health hints on a single counter. Long threads cost a fixed
+    # Staged thread-health hints on a single counter. The count is turns since
+    # the last compaction (reset at the compact_boundary above), so it tracks the
+    # live thread rather than reclaimed history. Long threads cost a fixed
     # per-message context tax and lose their own plot once they run too long, so
     # the nudge escalates with turn count:
     #   ~150  yellow  - getting long, plan a handoff point
