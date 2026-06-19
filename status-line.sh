@@ -423,31 +423,9 @@ except Exception:
 print(msgs, dispatches)
 " 2>/dev/null)
 fi
-if [[ "$msg_count" =~ ^[0-9]+$ ]] && [ "$msg_count" -gt 0 ]; then
-    # Staged thread-health hints on a single counter. The count is turns since
-    # the last compaction (reset at the compact_boundary above), so it tracks the
-    # live thread rather than reclaimed history. Long threads cost a fixed
-    # per-message context tax and lose their own plot once they run too long, so
-    # the nudge escalates with turn count:
-    #   ~150  yellow  - getting long, plan a handoff point
-    #   ~300  orange  - handoff to a file and reopen fresh (the plot-loss line)
-    #   ~2000 red     - hard stop: compact or start a new chat
-    if [ "$msg_count" -lt 150 ]; then
-        msg_colour='\033[38;5;245m'   # grey - plenty of headroom
-        msg_hint=''
-    elif [ "$msg_count" -lt 300 ]; then
-        msg_colour='\033[38;5;220m'   # yellow - getting long
-        msg_hint=' ⚠ plan handoff'
-    elif [ "$msg_count" -lt 2000 ]; then
-        msg_colour='\033[38;5;208m'   # orange - handoff and reopen fresh
-        msg_hint=' 👝 handoff + fresh chat'
-    else
-        msg_colour='\033[38;5;196m'   # red - hard stop
-        msg_hint=' 🛑 compact or new chat'
-    fi
-    [ -n "$line2" ] && line2="${line2} | "
-    line2=$(printf "%s${msg_colour}💬%s${msg_hint}\033[0m" "$line2" "$msg_count")
-fi
+# Thread-health turn counter removed: with disciplined compaction (context kept
+# lean), turns-since-compaction is not a useful nudge. msg_count is still computed
+# above because the delegation meter below uses it.
 
 # Delegation meter: the main session is meant to orchestrate, not hand-drive.
 # The costliest sessions were long threads with zero subagent dispatches, so
