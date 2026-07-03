@@ -119,13 +119,27 @@ window_size=$(echo "$input" | jq -r '.context_window.context_window_size // empt
 # Sonnet/Haiku in 1M-context mode (e.g. claude-sonnet-4-6[1m]) get the 1M window.
 model_lower=$(echo "$model" | tr '[:upper:]' '[:lower:]')
 model_id=$(echo "$input" | jq -r '.model.id // empty' | tr '[:upper:]' '[:lower:]')
+# Derive canonical window from model family AND generation.
+# Sonnet 5+ ships a 1M window by default; Sonnet 4.x is 200K unless
+# it carries a [1m]/1m marker or Claude Code reports a larger size.
 case "$model_lower" in
     *opus*)    canonical_window=1000000 ;;
-    *sonnet*)  canonical_window=200000  ;;
+    *sonnet*)
+        # Extract a leading major version from the id (e.g. claude-sonnet-5 -> 5,
+        # claude-sonnet-4-6 -> 4). Default to 4 when unparseable.
+        sonnet_major=$(printf '%s' "$model_id" | sed -n 's/.*sonnet-\([0-9]\{1,\}\).*/\1/p')
+        if [ -n "$sonnet_major" ] && [ "$sonnet_major" -ge 5 ] 2>/dev/null; then
+            canonical_window=1000000
+        else
+            canonical_window=200000
+        fi
+        ;;
     *haiku*)   canonical_window=200000  ;;
     *gemini*)  canonical_window=2000000 ;;
+    *fable*)   canonical_window=200000  ;;   # conservative default; Fable had no case (empty window)
     *)         canonical_window=""      ;;
 esac
+# Explicit 1M-mode marker still forces 1M for any family (belt and braces).
 case "$model_id$model_lower" in
     *'[1m]'*|*1m*) canonical_window=1000000 ;;
 esac
