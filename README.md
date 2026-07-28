@@ -6,7 +6,7 @@ A visual status line script for [Claude Code](https://docs.anthropic.com/en/docs
 
 ```
 ◔ 12% | Opus 4.7 | 🧠high | +9% spare
-2 files | 2m00s | A$0.71 | main
+2 files | 2m00s | A$0.71 | myrepo/src | main
 ```
 
 ## Features
@@ -24,7 +24,8 @@ A visual status line script for [Claude Code](https://docs.anthropic.com/en/docs
 - **Session cost** in AUD (configurable exchange rate)
 - **Session duration** with adaptive formatting (`45s`, `12m34s`, `1h02m`)
 - **Reasoning effort** indicator with colour coding: green (`⚡low`), yellow (`⚙ med`), magenta (`🧠high`)
-- **Git info**: branch, clean/dirty status, changed file count
+- **Current directory**: project root basename, plus the sub-path when the session cwd is nested inside it (`myrepo/src/lib`). Falls back to the cwd basename if you're outside the project.
+- **Git info**: branch (short sha when detached), clean/dirty status, changed file count
 - **7-day Anthropic Max quota pace** as a single status chunk on line 1. One of:
   - `+N% spare` (green) — you're under pace by N percentage points; room to spare.
   - `on track` (yellow) — within ±7% of where you should be.

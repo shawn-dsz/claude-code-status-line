@@ -1,11 +1,12 @@
 #!/bin/bash
 # Status line script for Claude Code
-# Displays: context_health | duration | model | output_style | effort | project_dir | git_status | files
+# Displays: context_health | duration | model | output_style | effort | dir | git_branch | git_status | files
 
 input=$(cat)
 model=$(echo "$input" | jq -r '.model.display_name')
 output_style=$(echo "$input" | jq -r '.output_style.name')
 project_dir=$(echo "$input" | jq -r '.workspace.project_dir')
+current_dir=$(echo "$input" | jq -r '.workspace.current_dir // .workspace.project_dir')
 transcript_path=$(echo "$input" | jq -r '.transcript_path // empty')
 
 # Session identity
@@ -232,6 +233,10 @@ ahead_count='0'
 
 if git -C "$project_dir" rev-parse --git-dir > /dev/null 2>&1; then
     git_branch=$(git -C "$project_dir" rev-parse --abbrev-ref HEAD 2>/dev/null)
+    # Detached HEAD reports the literal "HEAD"; show the short sha instead.
+    if [ "$git_branch" = 'HEAD' ]; then
+        git_branch=$(git -C "$project_dir" rev-parse --short HEAD 2>/dev/null)
+    fi
     git_output=$(git -C "$project_dir" --no-optional-locks status --porcelain 2>/dev/null)
 
     if [ -z "$git_output" ]; then
@@ -330,7 +335,20 @@ if [ -n "$effort_display" ]; then
     line1=$(printf "%s | %s" "$line1" "$effort_display")
 fi
 
-# Line 2: linear ticket | unpushed commits | files | duration | cost | message count | last response
+# Directory label: project root basename, plus the sub-path when the session cwd
+# sits inside it (e.g. "myrepo/src/lib"). Falls back to the cwd basename when the
+# two are unrelated (cd'd outside the project).
+dir_display=''
+if [ -n "$current_dir" ] && [ "$current_dir" != 'null' ]; then
+    project_base=$(basename "$project_dir" 2>/dev/null)
+    case "$current_dir" in
+        "$project_dir")   dir_display="$project_base" ;;
+        "$project_dir"/*) dir_display="${project_base}/${current_dir#"$project_dir"/}" ;;
+        *)                dir_display=$(basename "$current_dir" 2>/dev/null) ;;
+    esac
+fi
+
+# Line 2: linear ticket | unpushed commits | files | duration | cost | message count | last response | dir | branch
 line2=''
 
 if [ -n "$linear_display" ]; then
@@ -577,6 +595,16 @@ fi
 
 if [ -n "$week_render" ]; then
     line1="${line1} | ${week_render}"
+fi
+
+if [ -n "$dir_display" ]; then
+    [ -n "$line2" ] && line2="${line2} | "
+    line2=$(printf "%s\033[38;5;110m%s\033[0m" "$line2" "$dir_display")
+fi
+
+if [ -n "$git_branch" ]; then
+    [ -n "$line2" ] && line2="${line2} | "
+    line2=$(printf "%s\033[38;5;245m%s\033[0m" "$line2" "$git_branch")
 fi
 
 printf "%s\n%s\n" "$line1" "$line2"
