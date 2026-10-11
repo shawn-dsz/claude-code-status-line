@@ -28,9 +28,9 @@ A visual status line script for [Claude Code](https://docs.anthropic.com/en/docs
 - **Git info**: branch (short sha when detached), clean/dirty status, changed file count
 - **7-day Anthropic Max quota pace** as a single status chunk on line 1. One of:
   - `+N% spare` (green) — you're under pace by N percentage points; room to spare.
-  - `on track` (yellow) — within ±7% of where you should be.
-  - `-N% over` (orange) — over pace by N percentage points but projected to land under 100%.
-  - `🛑 over pace` (red) — projected end-of-week usage is at or above 100%.
+  - `on track` (yellow) — within 1 point of where you should be.
+  - `N% over` (orange) — up to 7 points ahead of pace.
+  - `🛑 N% over pace` (red) — more than 7 points ahead of pace.
 
   Greyed out if the source cache hasn't refreshed in 30+ minutes. Data source: the Raycast "Claude Usage" extension cache. The script auto-discovers the cache file once and stores its path in `~/.claude/state/seven-day-usage-cache-path`. The chunk is hidden when that data is unavailable.
 

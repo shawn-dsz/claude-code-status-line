@@ -568,21 +568,22 @@ now = datetime.now(timezone.utc)
 window_h = 7 * 24
 hours_left = max(0.0, (reset - now).total_seconds() / 3600.0)
 progress = max(0.0, min(100.0, (window_h - hours_left) / window_h * 100.0))
-est = (util / progress * 100.0) if progress > 0 else util
 diff = util - progress  # negative = under pace, positive = over pace
 
-if est >= 100 and progress > 5:
-    fg = '38;5;196'
-    label = f'\U0001f6d1 {int(round(diff))}% over pace'
-elif diff < -1:
+# Any use ahead of the clock projects past 100% by reset, so a projection test
+# can never show "over" and calls exact pace a stop. Rank by points ahead instead.
+if abs(diff) <= 1:
+    fg = '38;5;220'
+    label = 'on track'
+elif diff < 0:
     fg = '38;5;34'
     label = f'+{int(round(-diff))}% spare'
-elif diff > 1:
+elif diff <= 7:
     fg = '38;5;208'
     label = f'{int(round(diff))}% over'
 else:
-    fg = '38;5;220'
-    label = 'on track'
+    fg = '38;5;196'
+    label = f'\U0001f6d1 {int(round(diff))}% over pace'
 
 if stale:
     fg = '38;5;245'

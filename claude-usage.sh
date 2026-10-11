@@ -117,21 +117,21 @@ now = datetime.now(timezone.utc)
 window_h = 7 * 24
 hours_left = max(0.0, (reset - now).total_seconds() / 3600.0)
 progress = max(0.0, min(100.0, (window_h - hours_left) / window_h * 100.0))
-projected = (util / progress * 100.0) if progress > 1 else util
 diff = util - progress
 
-if projected >= 100 and progress > 5:
-    fg = "38;5;196"
-    label = f"{int(round(diff))}% over pace"
-elif diff < -1:
+# Ranked by points ahead of the clock; a projection test hides "over" (see status-line.sh).
+if abs(diff) <= 1:
+    fg = "38;5;220"
+    label = "on track"
+elif diff < 0:
     fg = "38;5;34"
     label = f"+{int(round(-diff))}% spare"
-elif diff > 1:
+elif diff <= 7:
     fg = "38;5;208"
     label = f"{int(round(diff))}% over"
 else:
-    fg = "38;5;220"
-    label = "on track"
+    fg = "38;5;196"
+    label = f"{int(round(diff))}% over pace"
 
 if stale:
     fg = "38;5;245"
